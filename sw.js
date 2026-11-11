@@ -1,6 +1,6 @@
 // Service worker: giúp app chạy offline và cài được lên điện thoại.
 // Khi phát hành bản mới: tăng VERSION để người dùng nhận bản cập nhật.
-const VERSION = 'v1.0.0';
+const VERSION = 'v1.0.1';
 const APP_CACHE = 'hht-app-' + VERSION;
 const DATA_CACHE = 'hht-data';      // nét chữ, font, thư viện ngoài (ít thay đổi)
 
