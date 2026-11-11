@@ -12,6 +12,7 @@ Là **PWA**: dùng như website, cài được lên điện thoại/máy tính n
 | `js/data-words.js` | Từ ghép + 20 câu (bài học) kèm bản dịch |
 | `js/data-grammar.js` | Ngữ pháp từng câu: phân tích `chữ[VAI:nghĩa]` + điểm ngữ pháp |
 | `data/strokes/*.json` | Dữ liệu nét viết của 250 chữ (tên file = mã Unicode hex) |
+| `audio/*.mp3`, `js/data-audio.js` | Âm thanh đọc sẵn cho chữ, từ, 20 câu (tạo bằng `tools/gen_audio.py`) |
 | `js/vendor/hanzi-writer.min.js` | Thư viện vẽ & chấm nét viết |
 | `manifest.webmanifest`, `sw.js`, `icons/` | Phần PWA (cài app, offline) |
 
@@ -52,6 +53,15 @@ Người dùng mở app sẽ thấy thông báo **“Đã có phiên bản mới
 ## Đưa lên CH Play / App Store (tùy chọn)
 - **CH Play:** vào https://www.pwabuilder.com, nhập link GitHub Pages → tải gói Android (TWA) → đăng lên Google Play Console (phí một lần 25 USD). App trên Play tự cập nhật theo website.
 - **App Store:** cần máy Mac + tài khoản Apple Developer (99 USD/năm), đóng gói bằng PWABuilder (iOS) hoặc Capacitor.
+
+## Âm thanh
+App đọc bằng file MP3 có sẵn (giọng Microsoft Xiaoxiao), nên người dùng **không cần cài giọng đọc**. Văn bản tự nhập thì dùng giọng tiếng Trung của máy nếu có, không có thì đọc ghép từng chữ.
+Khi thêm chữ/từ/câu mới, tạo thêm âm thanh:
+```
+pip install edge-tts
+python tools/gen_audio.py
+```
+(chỉ tạo file còn thiếu; nhớ tăng `VERSION` trong `sw.js` rồi push).
 
 ## Lưu ý
 - Tiến độ học lưu trong trình duyệt từng máy; dùng “Sao lưu tiến độ / Khôi phục” ở chân trang để chuyển máy.

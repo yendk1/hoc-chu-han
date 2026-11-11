@@ -90,20 +90,94 @@ function updateStats() {
   $('#stats').innerHTML = `Đã thuộc <b>${known}</b>/${CHAR_LIST.length} · Cần ôn <i>${due}</i>`;
 }
 
-/* ================= Speech ================= */
-let zhVoice = null, warnedVoice = false;
+/* ================= Speech =================
+ * Thứ tự ưu tiên:
+ *  1. File MP3 có sẵn trong audio/ (chữ, từ, 20 câu) – không cần cài gì, chạy offline sau lần nghe đầu.
+ *  2. Giọng tiếng Trung có sẵn trong máy/trình duyệt (Web Speech API).
+ *  3. Văn bản tự nhập mà máy không có giọng: ghép file MP3 của từng từ/chữ đã có.
+ */
+let zhVoice = null;
 function pickVoice() {
   const vs = speechSynthesis.getVoices();
-  zhVoice = vs.find(v => /zh[-_]TW/i.test(v.lang)) || vs.find(v => /zh[-_]CN/i.test(v.lang)) || vs.find(v => /^zh/i.test(v.lang)) || null;
+  zhVoice = vs.find(v => /zh[-_](CN|Hans)/i.test(v.lang)) || vs.find(v => /zh[-_]TW/i.test(v.lang)) || vs.find(v => /^(zh|cmn)/i.test(v.lang)) || null;
 }
 if ('speechSynthesis' in window) { pickVoice(); speechSynthesis.onvoiceschanged = pickVoice; }
-function speak(text, rate = 0.8) {
-  if (!('speechSynthesis' in window)) return toast('Trình duyệt không hỗ trợ đọc thành tiếng');
-  speechSynthesis.cancel();
+const AUDIO = window.AUDIO_FILES || new Set();
+const audioKey = t => [...t].map(c => c.codePointAt(0).toString(16)).join('-');
+const SENT_IDX = new Map(LESSONS.map((x, i) => [x[0], i]));
+const FULL_TEXT = LESSONS.map(x => x[0]).join('');
+const player = new Audio();
+let playQueue = [], playToken = 0;
+
+function stopSpeech() {
+  playToken++; playQueue = [];
+  try { player.pause(); } catch (e) {}
+  if ('speechSynthesis' in window) speechSynthesis.cancel();
+}
+// Âm thanh im lặng rất ngắn: phát ngay trong lúc chạm để iOS "mở khóa" trình phát.
+const SILENT = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
+const blobCache = new Map();
+function audioSrc(url) {
+  if (/^https?:/.test(url)) return Promise.resolve(url);           // giọng trực tuyến: phát trực tiếp
+  if (!blobCache.has(url)) blobCache.set(url, fetch(url).then(r => { if (!r.ok) throw new Error(r.status); return r.blob(); })
+    .then(b => URL.createObjectURL(b)).catch(e => { blobCache.delete(url); throw e; }));
+  return blobCache.get(url);                                        // file của app: tải bằng fetch (service worker lưu offline)
+}
+function playFiles(urls, onFail) {
+  const token = ++playToken; playQueue = urls.slice();
+  const fail = () => { if (token === playToken) { playQueue = []; onFail?.(); } };
+  try { player.src = SILENT; player.play()?.catch?.(() => {}); } catch (e) {}
+  const next = () => {
+    if (token !== playToken || !playQueue.length) return;
+    const u = playQueue.shift();
+    if (playQueue[0]) audioSrc(playQueue[0]).catch(() => {});      // tải trước đoạn kế tiếp
+    audioSrc(u).then(src => {
+      if (token !== playToken) return;
+      player.src = src; player.onended = next; player.onerror = fail;
+      const pr = player.play(); if (pr && pr.catch) pr.catch(err => { if (err.name !== 'AbortError') fail(); });
+    }, fail);
+  };
+  next();
+}
+function localFiles(text, slow) {
+  const t = text.trim();
+  if (SENT_IDX.has(t)) return [`audio/s${SENT_IDX.get(t)}${slow ? '-slow' : ''}.mp3`];
+  if (t === FULL_TEXT) return LESSONS.map((_, i) => `audio/s${i}${slow ? '-slow' : ''}.mp3`);
+  const k = audioKey(t); if (AUDIO.has(k)) return [`audio/${k}.mp3`];
+  return null;
+}
+// Văn bản tự nhập: ghép file có sẵn của từng từ/chữ (chữ chưa có file thì bỏ qua)
+function pieceFiles(text) {
+  const out = []; let missing = 0;
+  for (const t of segment(text)) {
+    const k = t.w ? audioKey(t.w.w) : null;
+    if (k && AUDIO.has(k)) { out.push(`audio/${k}.mp3`); continue; }
+    for (const c of (t.chars || [t.c])) {
+      const kc = audioKey(c);
+      if (AUDIO.has(kc)) out.push(`audio/${kc}.mp3`); else if (/\p{Script=Han}/u.test(c)) missing++;
+    }
+  }
+  return { files: out, missing };
+}
+function speakWithVoice(text, rate) {
   const u = new SpeechSynthesisUtterance(text);
-  u.lang = zhVoice?.lang || 'zh-CN'; if (zhVoice) u.voice = zhVoice; u.rate = rate;
+  u.lang = zhVoice.lang; u.voice = zhVoice; u.rate = rate;
   speechSynthesis.speak(u);
-  if (!zhVoice && !warnedVoice) { warnedVoice = true; toast('Máy chưa có giọng đọc tiếng Trung. Hãy dùng Edge, hoặc cài thêm: Settings → Time & Language → Speech → Add voices → Chinese.', 6000); }
+}
+const VOICE_HELP = 'Máy chưa có giọng đọc tiếng Trung nên chữ mới được đọc từng chữ (chữ lạ sẽ bị bỏ qua). Muốn đọc liền mạch: xem hướng dẫn cài giọng ở mục “Nghe không được?” cuối trang.';
+let warnedPieces = false;
+function speak(text, rate = 0.8) {
+  if (!text) return;
+  stopSpeech();
+  const slow = rate <= 0.6;
+  const noSound = () => toast('Không phát được âm thanh. Hãy kiểm tra âm lượng (iPhone: gạt tắt chế độ im lặng) và kết nối mạng.', 5000);
+  const files = localFiles(text, slow);
+  if (files) return playFiles(files, () => zhVoice ? speakWithVoice(text, rate) : noSound());
+  if (zhVoice) return speakWithVoice(text, rate);
+  const { files: pieces, missing } = pieceFiles(text);
+  if (!pieces.length) return toast(VOICE_HELP, 7000);
+  playFiles(pieces, noSound);
+  if (missing && !warnedPieces) { warnedPieces = true; toast(VOICE_HELP, 7000); }
 }
 
 /* ================= Stroke data ================= */
@@ -260,9 +334,10 @@ function openModal(view, push = true) {
   if (view.type === 'char') renderCharView(view.c);
   else if (view.type === 'word') renderWordView(view.w);
   else if (view.type === 'comp') renderCompView(view.k);
+  else if (view.type === 'help') renderVoiceHelp();
   $('.modal-panel').scrollTop = 0;
 }
-function closeModal() { $('#modal').hidden = true; modalStack.length = 0; activeWriter = null; if ('speechSynthesis' in window) speechSynthesis.cancel(); }
+function closeModal() { $('#modal').hidden = true; modalStack.length = 0; activeWriter = null; stopSpeech(); }
 const openChar = c => openModal({ type: 'char', c });
 const openWord = w => openModal({ type: 'word', w });
 const openComp = k => openModal({ type: 'comp', k });
@@ -502,7 +577,7 @@ renderers.text = () => {
         ${SETTINGS.fullVi ? `<div class="vi">${ls.map(l => `<sup>${l.i + 1}</sup> ${esc(l.vi)}`).join(' ')}</div>` : ''}</div>`;
     }).join('')}`;
   $('#tglFullVi').onclick = () => { SETTINGS.fullVi = !SETTINGS.fullVi; saveSettings(); renderers.text(); };
-  $('#sayAll').onclick = () => speak(LESSONS.map(x => x[0]).join(''), 0.85);
+  $('#sayAll').onclick = () => speak(FULL_TEXT, 0.85);
 };
 
 /* ---------- Chars ---------- */
@@ -905,6 +980,24 @@ const applyToggles = () => { document.body.classList.toggle('show-py', SETTINGS.
 $('#tglPy').onchange = e => { SETTINGS.py = e.target.checked; saveSettings(); applyToggles(); };
 $('#tglHv').onchange = e => { SETTINGS.hv = e.target.checked; saveSettings(); applyToggles(); };
 $('#stats').onclick = () => showTab('review');
+
+function renderVoiceHelp() {
+  $('#modalTitle').textContent = 'Nghe không được?';
+  $('#modalBody').innerHTML = `<div class="help">
+    <p><b>Chữ, từ và 20 câu bài học</b> đã có sẵn file âm thanh trong app – <b>không cần cài gì</b>. Nếu vẫn không nghe:</p>
+    <ul><li>Tăng âm lượng; trên <b>iPhone</b> gạt tắt nút <b>im lặng</b> ở cạnh máy.</li>
+    <li>Lần đầu nghe mỗi chữ cần có mạng; sau đó nghe được cả khi offline.</li>
+    <li>Thấy thông báo “Đã có phiên bản mới” thì bấm <b>Cập nhật ngay</b>.</li></ul>
+    <p>Trạng thái máy này: ${zhVoice ? `✅ có giọng tiếng Trung <i>(${esc(zhVoice.name)})</i>` : '⚠️ chưa có giọng tiếng Trung'} – chỉ cần cho <b>văn bản tự nhập</b> ở tab “Văn bản mới” để đọc liền mạch (không có thì app đọc từng chữ).</p>
+    <h4>Cài giọng tiếng Trung (không bắt buộc)</h4>
+    <ul>
+      <li><b>Windows 10/11:</b> Settings → Time &amp; Language → <b>Speech</b> → <i>Manage voices</i> → <b>Add voices</b> → gõ “Chinese” → chọn <b>Chinese (Simplified, China)</b> → Add. Cài xong <b>tắt hẳn trình duyệt rồi mở lại</b>. (Trên Windows 11 có thể nằm ở Time &amp; Language → Language &amp; region → Add a language → Chinese (Simplified) → tích <i>Text-to-speech</i>.)</li>
+      <li><b>Android:</b> Cài đặt → Hệ thống → Ngôn ngữ &amp; nhập liệu → <b>Đầu ra chuyển văn bản thành giọng nói</b> → bánh răng của <i>Dịch vụ lời nói của Google</i> → Cài đặt dữ liệu giọng nói → <b>Tiếng Trung (Trung Quốc đại lục)</b> → tải về.</li>
+      <li><b>iPhone/iPad:</b> Cài đặt → Trợ năng → Nội dung được đọc → <b>Giọng nói</b> → Tiếng Trung → tải một giọng (vd. Tingting).</li>
+      <li><b>Mac:</b> System Settings → Accessibility → Spoken Content → System voice → Manage Voices → Chinese.</li>
+    </ul></div>`;
+}
+$('#btnVoiceHelp').onclick = () => { modalStack.length = 0; openModal({ type: 'help' }); };
 
 $('#btnExport').onclick = () => {
   const blob = new Blob([JSON.stringify({ srs: SRS, notes: NOTES, done: DONE, custom: CUSTOM, settings: SETTINGS }, null, 1)], { type: 'application/json' });

@@ -336,3 +336,9 @@ body:not(.show-py) .ch .py, body:not(.show-hv) .ch .hv { visibility: hidden; hei
 .g-title { font-weight: 600; font-size: 14px; margin: 2px 0 4px; }
 .g-ex { font-size: 14px; color: var(--ink); }
 .g-ex .hz { font-size: 17px; color: var(--accent); }
+
+/* help */
+.help { font-size: 14.5px; line-height: 1.6; }
+.help ul { padding-left: 20px; margin: 6px 0 12px; }
+.help li { margin-bottom: 6px; }
+.help h4 { margin-top: 14px; }

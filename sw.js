@@ -1,6 +1,6 @@
 // Service worker: giúp app chạy offline và cài được lên điện thoại.
 // Khi phát hành bản mới: tăng VERSION để người dùng nhận bản cập nhật.
-const VERSION = 'v1.0.1';
+const VERSION = 'v1.1.0';
 const APP_CACHE = 'hht-app-' + VERSION;
 const DATA_CACHE = 'hht-data';      // nét chữ, font, thư viện ngoài (ít thay đổi)
 
@@ -8,7 +8,7 @@ const APP_SHELL = [
   './', 'index.html', 'manifest.webmanifest',
   'css/style.css',
   'js/vendor/hanzi-writer.min.js', 'js/data-chars.js', 'js/data-components.js',
-  'js/data-words.js', 'js/data-grammar.js', 'js/app.js',
+  'js/data-words.js', 'js/data-grammar.js', 'js/data-audio.js', 'js/app.js',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/favicon.png',
 ];
 
@@ -26,13 +26,13 @@ self.addEventListener('message', e => { if (e.data === 'skipWaiting') self.skipW
 
 self.addEventListener('fetch', e => {
   const req = e.request;
-  if (req.method !== 'GET') return;
+  if (req.method !== 'GET' || req.headers.has('range')) return;   // để trình duyệt tự xử lý tải âm thanh theo đoạn
   const url = new URL(req.url);
   const sameOrigin = url.origin === self.location.origin;
-  const isData = (sameOrigin && url.pathname.includes('/data/strokes/')) || !sameOrigin;
+  const isData = (sameOrigin && /\/(data\/strokes|audio)\//.test(url.pathname)) || !sameOrigin;
 
   if (isData) {
-    // Cache-first: dữ liệu nét, font chữ, từ điển CDN
+    // Cache-first: dữ liệu nét, âm thanh, font chữ, từ điển CDN
     e.respondWith(caches.open(DATA_CACHE).then(async cache => {
       const hit = await cache.match(req);
       if (hit) return hit;
