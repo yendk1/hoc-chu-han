@@ -441,3 +441,8 @@ body.hide-vi .sent-vi { display: none; }
   .sv-chars { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 6px; scrollbar-width: thin; }
   .sv-chars .chip { flex: 0 0 auto; }
 }
+.ft-btn { min-width: 150px; justify-content: center; }
+.ft-btn.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.sent.playing { background: var(--accent-soft); box-shadow: inset 4px 0 0 var(--accent); }
+.sent.playing .sent-n { background: var(--accent); color: #fff; }
+@media (max-width: 700px) { .tx-tools .btn-row { width: 100%; } .ft-btn { flex: 1; min-width: 0; } }

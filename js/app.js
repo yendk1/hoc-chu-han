@@ -113,6 +113,7 @@ let playQueue = [], playToken = 0;
 function stopSpeech() {
   playToken++; playQueue = [];
   try { player.pause(); } catch (e) {}
+  if (typeof ftReset === 'function') ftReset();
   if ('speechSynthesis' in window) speechSynthesis.cancel();
 }
 // Âm thanh im lặng rất ngắn: phát ngay trong lúc chạm để iOS "mở khóa" trình phát.
@@ -339,7 +340,7 @@ function openModal(view, push = true) {
   else if (view.type === 'sent') renderSentView(view);
   $('.modal-panel').scrollTop = 0;
 }
-function closeModal() { $('#modal').hidden = true; modalStack.length = 0; activeWriter = null; stopSpeech(); }
+function closeModal() { $('#modal').hidden = true; modalStack.length = 0; activeWriter = null; if (!FT.mode) stopSpeech(); }
 const openChar = c => openModal({ type: 'char', c });
 const openWord = w => openModal({ type: 'word', w });
 const openComp = k => openModal({ type: 'comp', k });
@@ -511,6 +512,7 @@ function renderCompView(k) {
 const renderers = {};
 let currentTab = 'text';
 function showTab(tab) {
+  if (FT.mode && tab !== 'text') stopSpeech();
   currentTab = tab;
   $$('#tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   $$('.tab').forEach(s => s.classList.toggle('active', s.id === 'tab-' + tab));
@@ -582,7 +584,10 @@ renderers.text = () => {
         <p class="tx-hint">👆 Chạm vào một câu để xem ngữ pháp, cách ghép chữ và tập viết.</p></div>
       <div class="tx-tools">
         <div class="pills">${pill('py', 'Pinyin')}${pill('hv', 'Hán Việt')}${pill('viOn', 'Tiếng Việt')}</div>
-        <button class="btn" id="sayAll">🔊 Nghe toàn bài</button>
+        <div class="btn-row">
+          <button class="btn ft-btn" data-ft="normal"></button>
+          <button class="btn ft-btn" data-ft="slow"></button>
+        </div>
       </div>
     </div>
     ${PARAS.map(([a, b]) => `<div class="tx-para">${LESSON_LIST.slice(a, b + 1).map(l => `
@@ -591,8 +596,47 @@ renderers.text = () => {
         <div class="sent-body"><div class="reader">${renderReader(l.text)}</div><div class="sent-vi">${esc(l.viOff)}</div></div>
       </div>`).join('')}</div>`).join('')}
     <p class="tx-src">Bản dịch tiếng Việt: <a href="${esc(window.VI_SOURCE || '#')}" target="_blank" rel="noopener">vi.falundafa.org</a></p>`;
-  $('#sayAll').onclick = () => speak(FULL_TEXT, 0.85);
+  ftUI();
 };
+
+/* Nghe toàn bài: bấm 1 lần = đọc, bấm lần nữa = tạm dừng, bấm tiếp = nghe tiếp */
+const FT = { mode: null, idx: 0, paused: false, token: 0 };
+const FT_LABEL = { normal: ['🔊 Nghe toàn bài', '⏸ Tạm dừng', '▶ Nghe tiếp'], slow: ['🐢 Nghe chậm', '⏸ Tạm dừng', '▶ Nghe tiếp'] };
+function ftUI() {
+  $$('[data-ft]').forEach(b => {
+    const m = b.dataset.ft, active = FT.mode === m;
+    b.textContent = FT_LABEL[m][!active ? 0 : FT.paused ? 2 : 1];
+    b.classList.toggle('on', active);
+  });
+  $$('.sent.playing').forEach(el => el.classList.remove('playing'));
+  if (FT.mode) $(`.sent[data-sent="${FT.idx}"]`)?.classList.add('playing');
+}
+function ftReset() { if (!FT.mode) return; FT.mode = null; FT.paused = false; ftUI(); }
+function ftPlay(i) {
+  const token = FT.token;
+  if (i >= LESSONS.length) { ftReset(); return; }
+  FT.idx = i; ftUI();
+  const el = $(`.sent[data-sent="${i}"]`);
+  if (el && currentTab === 'text' && $('#modal').hidden) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  audioSrc(`audio/s${i}${FT.mode === 'slow' ? '-slow' : ''}.mp3`).then(src => {
+    if (token !== FT.token || token !== playToken) return;
+    player.src = src;
+    player.onended = () => { if (token === FT.token && token === playToken) ftPlay(i + 1); };
+    player.onerror = () => { if (token === FT.token) { ftReset(); toast('Không phát được âm thanh. Kiểm tra mạng và âm lượng.'); } };
+    if (!FT.paused) player.play()?.catch?.(err => { if (err.name !== 'AbortError' && token === FT.token) { ftReset(); toast('Không phát được âm thanh. Kiểm tra âm lượng (iPhone: tắt chế độ im lặng).'); } });
+  }, () => { if (token === FT.token) { ftReset(); toast('Không tải được âm thanh (cần mạng lần đầu).'); } });
+}
+function ftToggle(mode) {
+  if (FT.mode === mode) {
+    FT.paused = !FT.paused;
+    if (FT.paused) player.pause(); else player.play()?.catch?.(() => {});
+    ftUI(); return;
+  }
+  stopSpeech();                                   // dừng mọi âm thanh khác (cũng reset FT cũ)
+  try { player.src = SILENT; player.play()?.catch?.(() => {}); } catch (e) {}   // mở khóa âm thanh trên iOS
+  FT.mode = mode; FT.paused = false; FT.token = playToken;
+  ftPlay(0);
+}
 const openSent = (i, tab = 'gram') => openModal({ type: 'sent', i, tab, wc: 0 });
 
 /* ---------- Sentence popup ---------- */
@@ -1074,6 +1118,7 @@ document.addEventListener('click', e => {
   if (t.closest('[data-close]')) return closeModal();
   const say = t.closest('[data-say]'); if (say) { speak(say.dataset.say); return; }
   const sayText = t.closest('[data-say-text]'); if (sayText) { speak(LESSONS[+sayText.dataset.sayText][0], sayText.hasAttribute('data-slow') ? 0.5 : 0.8); return; }
+  const ftb = t.closest('[data-ft]'); if (ftb) return ftToggle(ftb.dataset.ft);
   const pl = t.closest('[data-pill]'); if (pl) return setToggle(pl.dataset.pill, !SETTINGS[pl.dataset.pill]);
   const svt = t.closest('[data-sv-tab]'); if (svt) { const v = modalStack.at(-1); v.tab = svt.dataset.svTab; $$('[data-sv-tab]').forEach(b => b.classList.toggle('on', b === svt)); activeWriter = null; drawSentPane(v); return; }
   const svn = t.closest('[data-sv-nav]'); if (svn && !svn.disabled) { e.preventDefault(); const v = modalStack.at(-1); modalStack[modalStack.length - 1] = { type: 'sent', i: +svn.dataset.svNav, tab: v?.type === 'sent' ? v.tab : 'gram', wc: 0 }; openModal(modalStack.at(-1), false); return; }
