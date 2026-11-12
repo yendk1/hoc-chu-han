@@ -37,7 +37,8 @@ WORD_RAW.trim().split('\n').forEach(line => {
   if (o.py.length !== [...w].length) console.warn('Pinyin không khớp', w);
   WORDS.push(o); WORDMAP[w] = o; MAXW = Math.max(MAXW, [...w].length);
 });
-const LESSON_LIST = LESSONS.map(([text, vi], i) => ({ i, text, vi }));
+const VI_OFF = window.VI_OFFICIAL || [];
+const LESSON_LIST = LESSONS.map(([text, vi], i) => ({ i, text, vi, viOff: VI_OFF[i] || vi }));
 const PARAS = [[0, 6], [7, 11], [12, 13], [14, 19]];
 
 const CHAR_WORDS = {};
@@ -59,7 +60,7 @@ const store = {
   set(k, v) { try { localStorage.setItem('hht_' + k, JSON.stringify(v)); } catch { } },
 };
 let SRS = store.get('srs', {}), NOTES = store.get('notes', {}), DONE = store.get('done', {}), CUSTOM = store.get('custom', []);
-const SETTINGS = Object.assign({ py: true, hv: true, vi: true, rad: true, lesson: 0, mode: 'flash', scope: 'smart', count: 15 }, store.get('settings', {}));
+const SETTINGS = Object.assign({ py: true, hv: true, vi: true, viOn: true, rad: true, lesson: 0, mode: 'flash', scope: 'smart', count: 15 }, store.get('settings', {}));
 const saveSettings = () => store.set('settings', SETTINGS);
 
 const DAY = 864e5, INTERVALS = [0, 1, 3, 7, 14, 30, 60];
@@ -335,6 +336,7 @@ function openModal(view, push = true) {
   else if (view.type === 'word') renderWordView(view.w);
   else if (view.type === 'comp') renderCompView(view.k);
   else if (view.type === 'help') renderVoiceHelp();
+  else if (view.type === 'sent') renderSentView(view);
   $('.modal-panel').scrollTop = 0;
 }
 function closeModal() { $('#modal').hidden = true; modalStack.length = 0; activeWriter = null; stopSpeech(); }
@@ -507,7 +509,7 @@ function renderCompView(k) {
 
 /* ================= Tabs ================= */
 const renderers = {};
-let currentTab = 'lessons';
+let currentTab = 'text';
 function showTab(tab) {
   currentTab = tab;
   $$('#tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
@@ -543,7 +545,7 @@ renderers.lessons = () => {
           </div>
         </div>
         <div class="reader big">${renderReader(l.text)}</div>
-        <div class="vi ${SETTINGS.vi ? '' : 'blur'}" id="viBox" title="Bấm để ẩn/hiện bản dịch"><span class="lbl">DỊCH NGHĨA (bấm để ẩn/hiện)</span>${esc(l.vi)}</div>
+        <div class="vi ${SETTINGS.vi ? '' : 'blur'}" id="viBox" title="Bấm để ẩn/hiện bản dịch"><span class="lbl">BẢN DỊCH (bấm để ẩn/hiện)</span>${esc(l.viOff)}<div class="vi-lit"><b>Dịch sát từng chữ:</b> ${esc(l.vi)}</div></div>
       </div>
       ${renderGrammarPanel(i)}
       <h3 class="sec-title">Từ vựng trong câu <small>${words.length} từ – bấm để xem cách ghép nghĩa</small></h3>
@@ -566,19 +568,149 @@ renderers.lessons = () => {
 function gotoLesson(i) { SETTINGS.lesson = i; saveSettings(); closeModal(); showTab('lessons'); }
 
 /* ---------- Full text ---------- */
+const pill = (key, label) => `<button class="pill ${SETTINGS[key] ? 'on' : ''}" data-pill="${key}" aria-pressed="${!!SETTINGS[key]}">${label}</button>`;
+function setToggle(key, on) {
+  SETTINGS[key] = on; saveSettings(); applyToggles();
+  if (key === 'py') $('#tglPy').checked = on;
+  if (key === 'hv') $('#tglHv').checked = on;
+  $$(`[data-pill="${key}"]`).forEach(b => { b.classList.toggle('on', on); b.setAttribute('aria-pressed', on); });
+}
 renderers.text = () => {
   $('#tab-text').innerHTML = `
-    <div class="toolbar"><h2 style="flex:1">Toàn văn <small>– bấm vào chữ để xem chi tiết, bấm số để mở bài</small></h2>
-      <button class="btn" id="sayAll">🔊 Nghe toàn bài</button>
-      <button class="btn ${SETTINGS.fullVi ? 'on' : ''}" id="tglFullVi">Hiện dịch nghĩa</button></div>
-    ${PARAS.map(([a, b]) => {
-      const ls = LESSON_LIST.slice(a, b + 1);
-      return `<div class="panel para"><div class="reader">${ls.map(l => `<button class="sent-no" data-lesson="${l.i}" title="Mở bài ${l.i + 1}">${l.i + 1}</button>${renderReader(l.text)}`).join('')}</div>
-        ${SETTINGS.fullVi ? `<div class="vi">${ls.map(l => `<sup>${l.i + 1}</sup> ${esc(l.vi)}`).join(' ')}</div>` : ''}</div>`;
-    }).join('')}`;
-  $('#tglFullVi').onclick = () => { SETTINGS.fullVi = !SETTINGS.fullVi; saveSettings(); renderers.text(); };
+    <div class="tx-head">
+      <div><h2><span class="hz">論語</span> <small>Luận ngữ</small></h2>
+        <p class="tx-hint">👆 Chạm vào một câu để xem ngữ pháp, cách ghép chữ và tập viết.</p></div>
+      <div class="tx-tools">
+        <div class="pills">${pill('py', 'Pinyin')}${pill('hv', 'Hán Việt')}${pill('viOn', 'Tiếng Việt')}</div>
+        <button class="btn" id="sayAll">🔊 Nghe toàn bài</button>
+      </div>
+    </div>
+    ${PARAS.map(([a, b]) => `<div class="tx-para">${LESSON_LIST.slice(a, b + 1).map(l => `
+      <div class="sent" data-sent="${l.i}" role="button" tabindex="0" aria-label="Câu ${l.i + 1}">
+        <span class="sent-n">${l.i + 1}</span>
+        <div class="sent-body"><div class="reader">${renderReader(l.text)}</div><div class="sent-vi">${esc(l.viOff)}</div></div>
+      </div>`).join('')}</div>`).join('')}
+    <p class="tx-src">Bản dịch tiếng Việt: <a href="${esc(window.VI_SOURCE || '#')}" target="_blank" rel="noopener">vi.falundafa.org</a></p>`;
   $('#sayAll').onclick = () => speak(FULL_TEXT, 0.85);
 };
+const openSent = (i, tab = 'gram') => openModal({ type: 'sent', i, tab, wc: 0 });
+
+/* ---------- Sentence popup ---------- */
+const SENT_TABS = [['gram', '📐 Ngữ pháp'], ['words', '🧩 Từ & chữ'], ['write', '✍️ Tập viết']];
+function renderSentView(v) {
+  const i = v.i, l = LESSON_LIST[i], last = LESSON_LIST.length - 1;
+  $('#modalTitle').textContent = `Câu ${i + 1} / ${LESSON_LIST.length}`;
+  $('#modalBody').innerHTML = `
+    <div class="sv-top">
+      <div class="reader sv-reader">${renderReader(l.text)}</div>
+      <div class="sv-vi">${esc(l.viOff)}</div>
+      <div class="sv-actions">
+        <button class="btn" data-say-text="${i}">🔊 Nghe</button>
+        <button class="btn" data-say-text="${i}" data-slow>🐢 Chậm</button>
+        <span class="sp"></span>
+        <button class="btn nav" data-sv-nav="${i - 1}" ${i === 0 ? 'disabled' : ''} title="Câu trước">‹</button>
+        <button class="btn nav" data-sv-nav="${i + 1}" ${i === last ? 'disabled' : ''} title="Câu sau">›</button>
+      </div>
+    </div>
+    <div class="seg" role="tablist">${SENT_TABS.map(([k, n]) => `<button role="tab" class="${v.tab === k ? 'on' : ''}" data-sv-tab="${k}">${n}</button>`).join('')}</div>
+    <div id="svPane"></div>`;
+  drawSentPane(v);
+}
+// Các từ / chữ của câu theo thứ tự xuất hiện (không lặp)
+function sentUnits(text) {
+  const seen = new Set(), out = [];
+  for (const t of segment(text)) {
+    const k = t.w ? t.w.w : t.c;
+    if (!k || seen.has(k) || !(t.w || CHARS[t.c])) continue;
+    seen.add(k); out.push(k);
+  }
+  return out;
+}
+function snippet(text, key, r = 7) {
+  const p = text.indexOf(key); if (p < 0) return esc(text);
+  const a = Math.max(0, p - r), b = Math.min(text.length, p + key.length + r);
+  return (a > 0 ? '…' : '') + esc(text.slice(a, p)) + `<mark>${esc(key)}</mark>` + esc(text.slice(p + key.length, b)) + (b < text.length ? '…' : '');
+}
+const isSelfOnly = (d, c) => !d.parts.length || (d.parts.length === 1 && d.parts[0] === c);
+function unitItem(k, i) {
+  const w = WORDMAP[k], chars = [...k], d1 = chars.length === 1 ? CHARS[k] : null;
+  const py = w ? w.py.join(' ') : d1.py, hv = w ? w.hv : d1.hv, m = w ? w.m : d1.m;
+  const glue = w ? `<div class="wi-sum">${chars.map(c => CHARS[c] ? `<b class="hz">${c}</b> ${esc(CHARS[c].hv.split('/')[0])} <small>(${esc(short(CHARS[c].m))})</small>` : `<b class="hz">${c}</b>`).join(' <span class="op">+</span> ')}
+      <div class="wi-res">→ <b class="hz">${k}</b> <b class="cap">${esc(hv)}</b>: ${esc(m)}</div></div>` : '';
+  const charRows = chars.filter(c => CHARS[c]).map(c => {
+    const d = CHARS[c];
+    const parts = isSelfOnly(d, c) ? '<div class="muted small">Chữ độc thể (không tách thành bộ nhỏ hơn)</div>' : `<div class="formula sm">${d.parts.map(compChipSmall).join('<span class="op">+</span>')}</div>`;
+    if (d1) return `<div class="wi-one">${parts}<div class="wi-ex">💡 ${esc(d.ex)}</div><button class="link" data-c="${c}">Xem chi tiết chữ ${c} ›</button></div>`;
+    return `<div class="wi-ch">
+      <button class="big" data-c="${c}" title="Xem chi tiết chữ">${c}</button>
+      <div><div class="wi-chhead"><b>${esc(d.hv)}</b> <span class="wi-py">${esc(d.py)}</span> · ${esc(short(d.m))}</div>
+        ${parts}<div class="wi-ex">💡 ${esc(d.ex)}</div></div></div>`;
+  }).join('');
+  const others = LESSON_LIST.filter(l => l.i !== i && l.text.includes(k)).slice(0, 4);
+  const moreWords = d1 ? (CHAR_WORDS[k] || []).slice(0, 6) : [];
+  const uses = others.length || moreWords.length ? `<div class="wi-uses"><div class="sv-h sm">Gặp ở chỗ khác</div>
+      ${others.map(l => `<button class="use" data-sv-nav="${l.i}"><span class="use-n">Câu ${l.i + 1}</span><span class="hz">${snippet(l.text, k)}</span></button>`).join('')}
+      ${moreWords.length ? `<div class="chips" style="margin-top:6px">${moreWords.map(x => `<button class="chip" data-w="${x.w}"><span class="hz">${x.w}</span>${esc(x.hv)}</button>`).join('')}</div>` : ''}</div>` : '';
+  return `<details class="wi">
+    <summary><span class="wi-hz">${k}</span><span class="wi-top"><span class="wi-py">${esc(py)}</span><b class="cap">${esc(hv)}</b><button class="icon" data-say="${k}" title="Nghe">🔊</button></span><span class="wi-m">${esc(short(m))}</span></summary>
+    <div class="wi-body">${glue}${charRows}${uses}</div></details>`;
+}
+function drawSentPane(v) {
+  const pane = $('#svPane'); if (!pane) return;
+  const i = v.i, l = LESSON_LIST[i], g = GRAM[i];
+  if (v.tab === 'gram') {
+    pane.innerHTML = !g ? '<p class="muted">Chưa có phân tích.</p>' : `
+      <p class="sv-lead">Câu được chia thành các <b>cụm từ</b>. Màu cho biết vai trò của cụm trong câu; dòng chữ nhỏ là nghĩa của cụm.</p>
+      ${roleLegend()}
+      ${renderSentenceAnalysis(i)}
+      <div class="sv-h">Điểm ngữ pháp (${g.notes.length})</div>
+      <div class="sv-notes">${g.notes.map(n => {
+        const seen = GRAM_INDEX.find(e => e.p === n.p).lessons.filter(x => x !== i);
+        return `<div class="g-note"><div class="g-pat">${hzText(n.p)}</div><div class="g-title">${esc(n.title)}</div><div class="g-ex">${hzText(n.ex)}</div>
+          ${seen.length ? `<div class="sv-seen">Cũng gặp ở: ${seen.map(x => `<button class="chip" data-sv-nav="${x}">Câu ${x + 1}</button>`).join('')}</div>` : ''}</div>`;
+      }).join('')}</div>`;
+  } else if (v.tab === 'words') {
+    const units = sentUnits(l.text);
+    pane.innerHTML = `<p class="sv-lead">${units.length} từ/chữ theo thứ tự trong câu. Chạm vào từng dòng để xem nghĩa được ghép từ các bộ thế nào và ví dụ ở câu khác.</p>
+      <div class="wi-list">${units.map(k => unitItem(k, i)).join('')}</div>
+      <details class="vi-lit-box"><summary>Xem bản dịch sát từng chữ</summary><p>${esc(l.vi)}</p></details>`;
+    pane.querySelector('details.wi')?.setAttribute('open', '');
+  } else {
+    const chars = uniqHan(l.text).filter(c => CHARS[c]);
+    const k = Math.max(0, Math.min(v.wc || 0, chars.length - 1)), c = chars[k], d = CHARS[c];
+    pane.innerHTML = `
+      <p class="sv-lead">Chọn chữ để luyện (${chars.length} chữ trong câu):</p>
+      <div class="chips sv-chars">${chars.map((x, j) => `<button class="chip ${j === k ? 'on' : ''} st-${status(x)}" data-sv-wc="${j}"><span class="hz">${x}</span></button>`).join('')}</div>
+      <div class="sv-wgrid">
+        <div class="cd-left">
+          <div class="writer-box" id="svWriter"></div>
+          <div class="btn-row">
+            <button class="btn" data-act="anim">▶ Viết mẫu</button>
+            <button class="btn" data-act="quiz">✍️ Tự viết</button>
+            <button class="btn" data-act="blind" title="Không có nét mờ gợi ý">🙈 Viết nhớ</button>
+          </div>
+          <div class="quiz-msg" id="svMsg">Bấm “Tự viết” rồi viết bằng ngón tay/chuột vào ô.</div>
+        </div>
+        <div class="sv-winfo">
+          <div class="cd-head"><div class="cd-hz">${c}</div><div>
+            <div class="cd-hv">${esc(d.hv)}</div>
+            <div class="cd-py">${esc(d.py)} <button class="icon" data-say="${c}" title="Nghe">🔊</button></div>
+            <div class="cd-strokes" id="svStrokes">&nbsp;</div></div></div>
+          <div class="cd-mean">${esc(d.m)}</div>
+          ${isSelfOnly(d, c) ? '' : `<div class="formula sm" style="margin-top:10px">${d.parts.map(compChipSmall).join('<span class="op">+</span>')}<span class="op">=</span><span class="res">${c}</span></div>`}
+          <div class="btn-row" style="margin-top:14px">
+            <button class="btn" data-sv-wc="${k - 1}" ${k === 0 ? 'disabled' : ''}>‹ Chữ trước</button>
+            <button class="btn" data-sv-wc="${k + 1}" ${k === chars.length - 1 ? 'disabled' : ''}>Chữ sau ›</button>
+            <button class="btn" data-c="${c}">Chi tiết chữ</button>
+          </div>
+        </div>
+      </div>
+      <div class="sv-h">Thứ tự nét <small>(chấm vàng = điểm đặt bút)</small></div>
+      <div class="steps" id="svSteps"></div>`;
+    setupWriterPanel(c, $('#svWriter'), $('#svMsg'));
+    renderSteps(c, $('#svSteps')).then(n => { const el = $('#svStrokes'); if (el && n) el.textContent = `Số nét: ${n}`; });
+  }
+}
 
 /* ---------- Chars ---------- */
 let charFilter = { q: '', st: 'all', sort: 'order' };
@@ -942,6 +1074,11 @@ document.addEventListener('click', e => {
   if (t.closest('[data-close]')) return closeModal();
   const say = t.closest('[data-say]'); if (say) { speak(say.dataset.say); return; }
   const sayText = t.closest('[data-say-text]'); if (sayText) { speak(LESSONS[+sayText.dataset.sayText][0], sayText.hasAttribute('data-slow') ? 0.5 : 0.8); return; }
+  const pl = t.closest('[data-pill]'); if (pl) return setToggle(pl.dataset.pill, !SETTINGS[pl.dataset.pill]);
+  const svt = t.closest('[data-sv-tab]'); if (svt) { const v = modalStack.at(-1); v.tab = svt.dataset.svTab; $$('[data-sv-tab]').forEach(b => b.classList.toggle('on', b === svt)); activeWriter = null; drawSentPane(v); return; }
+  const svn = t.closest('[data-sv-nav]'); if (svn && !svn.disabled) { e.preventDefault(); const v = modalStack.at(-1); modalStack[modalStack.length - 1] = { type: 'sent', i: +svn.dataset.svNav, tab: v?.type === 'sent' ? v.tab : 'gram', wc: 0 }; openModal(modalStack.at(-1), false); return; }
+  const svw = t.closest('[data-sv-wc]'); if (svw && !svw.disabled) { const v = modalStack.at(-1); v.wc = +svw.dataset.svWc; drawSentPane(v); return; }
+  const sent = t.closest('[data-sent]'); if (sent && !t.closest('#modal')) return openSent(+sent.dataset.sent);
   const tab = t.closest('#tabs [data-tab]'); if (tab) { if (tab.dataset.tab === 'review' && RV) RV.active = RV.active && currentTab === 'review'; return showTab(tab.dataset.tab); }
   const gl = t.closest('[data-goto-lesson]'); if (gl) return gotoLesson(+gl.dataset.gotoLesson);
   const ls = t.closest('[data-lesson]'); if (ls && !ls.disabled) { SETTINGS.lesson = +ls.dataset.lesson; saveSettings(); if (currentTab !== 'lessons') return showTab('lessons'); renderers.lessons(); window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
@@ -954,13 +1091,19 @@ document.addEventListener('click', e => {
   const w = t.closest('[data-w]'); if (w && WORDMAP[w.dataset.w]) { if (t.closest('.wd') && !t.closest('.ch')) return openWord(w.dataset.w); if (!t.closest('.wd')) return openWord(w.dataset.w); }
 });
 // Double-click a word in the reader opens the word
-document.addEventListener('dblclick', e => { const w = e.target.closest('.wd'); if (w) { e.preventDefault(); openWord(w.dataset.w); } });
+document.addEventListener('dblclick', e => { const w = e.target.closest('.wd'); if (w && !w.closest('.sent')) { e.preventDefault(); openWord(w.dataset.w); } });
 $('#modalBack').onclick = () => { if (modalStack.length > 1) { modalStack.pop(); openModal(modalStack.at(-1), false); } };
 document.addEventListener('keydown', e => {
   if (e.target.matches('input, textarea, select')) return;
+  if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('[data-sent]') && $('#modal').hidden) { e.preventDefault(); return openSent(+e.target.dataset.sent); }
   if (!$('#modal').hidden) {
     if (e.key === 'Escape') closeModal();
     const cur = modalStack.at(-1);
+    if (cur?.type === 'sent' && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+      const j = cur.i + (e.key === 'ArrowLeft' ? -1 : 1);
+      if (LESSON_LIST[j]) { modalStack[modalStack.length - 1] = { ...cur, i: j, wc: 0 }; openModal(modalStack.at(-1), false); }
+      return;
+    }
     if (cur?.type === 'char' && CHARS[cur.c] && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
       const o = CHAR_LIST[CHARS[cur.c].idx + (e.key === 'ArrowLeft' ? -1 : 1)];
       if (o) { modalStack[modalStack.length - 1] = { type: 'char', c: o.c }; openModal(modalStack.at(-1), false); }
@@ -976,9 +1119,9 @@ document.addEventListener('keydown', e => {
   }
 });
 $('#tglPy').checked = SETTINGS.py; $('#tglHv').checked = SETTINGS.hv;
-const applyToggles = () => { document.body.classList.toggle('show-py', SETTINGS.py); document.body.classList.toggle('show-hv', SETTINGS.hv); };
-$('#tglPy').onchange = e => { SETTINGS.py = e.target.checked; saveSettings(); applyToggles(); };
-$('#tglHv').onchange = e => { SETTINGS.hv = e.target.checked; saveSettings(); applyToggles(); };
+const applyToggles = () => { document.body.classList.toggle('show-py', SETTINGS.py); document.body.classList.toggle('show-hv', SETTINGS.hv); document.body.classList.toggle('hide-vi', !SETTINGS.viOn); };
+$('#tglPy').onchange = e => setToggle('py', e.target.checked);
+$('#tglHv').onchange = e => setToggle('hv', e.target.checked);
 $('#stats').onclick = () => showTab('review');
 
 function renderVoiceHelp() {
@@ -1016,7 +1159,7 @@ $('#fileImport').onchange = async e => {
 
 applyToggles();
 updateStats();
-showTab('lessons');
+showTab('text');
 
 /* ================= PWA: offline + cài đặt + cập nhật ================= */
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
