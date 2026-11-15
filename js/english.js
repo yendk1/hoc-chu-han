@@ -5,26 +5,44 @@
  *   eg: [[cụm, VAI, nghĩa]]  · n: [[mẫu, tiêu đề, giải thích]]  · v: [[từ trong câu, từ gốc, từ loại, nghĩa]]
  * window.EN_WORD_AUDIO: danh sách từ có sẵn file audio/en/w/<từ>.mp3
  */
-const ED = window.EN_DATA || null;
-const EN_S = ED ? ED.sents : [];
-const IPA = (ED && ED.ipa) || {};
 const EN_WAUDIO = new Set(window.EN_WORD_AUDIO || []);
 const POS = { n: 'danh từ', v: 'động từ', adj: 'tính từ', adv: 'trạng từ', prep: 'giới từ', conj: 'liên từ', pron: 'đại từ', phr: 'cụm từ', det: 'hạn định từ', num: 'số từ', int: 'thán từ' };
 const enKey = w => w.toLowerCase().replace(/[’']/g, "'").replace(/^[^a-z0-9]+|[^a-z0-9]+$/g, '');
 const wSlug = w => enKey(w).replace(/[^a-z0-9]+/g, '_');
 SETTINGS.ipa ??= true; SETTINGS.zhOn ??= false;
 
-/* ---------- Từ vựng tổng hợp (gom theo từ gốc) ---------- */
-const VOCAB = {}, VOCAB_LIST = [];
-EN_S.forEach((s, i) => (s?.v || []).forEach(([form, lemma, pos, m]) => {
-  const k = enKey(lemma || form); if (!k) return;
-  let o = VOCAB[k];
-  if (!o) { o = VOCAB[k] = { k, lemma: lemma || form, pos, means: [], forms: new Set(), sents: [] }; VOCAB_LIST.push(o); }
-  if (m && !o.means.includes(m)) o.means.push(m);
-  o.forms.add(enKey(form)); if (!o.sents.includes(i)) o.sents.push(i);
-}));
-const FORM2VOCAB = {};
-VOCAB_LIST.forEach(o => o.forms.forEach(f => { if (!FORM2VOCAB[f]) FORM2VOCAB[f] = o.k; }));
+/* ---------- Hai bản tiếng Anh: chính thức (off) và bản AI dịch sát nguyên văn (ai) ----------
+ * Mỗi bản có từ vựng tổng hợp, chỉ mục ngữ pháp, phiên âm riêng. setSrc() chọn bản đang dùng. */
+function buildSrc(key, data) {
+  const S = data.sents, VOCAB = {}, VOCAB_LIST = [], FORM2VOCAB = {}, EN_GRAM = [], by = {};
+  S.forEach((s, i) => (s?.v || []).forEach(([form, lemma, pos, m]) => {
+    const k = enKey(lemma || form); if (!k) return;
+    let o = VOCAB[k];
+    if (!o) { o = VOCAB[k] = { k, lemma: lemma || form, pos, means: [], forms: new Set(), sents: [] }; VOCAB_LIST.push(o); }
+    if (m && !o.means.includes(m)) o.means.push(m);
+    o.forms.add(enKey(form)); if (!o.sents.includes(i)) o.sents.push(i);
+  }));
+  VOCAB_LIST.forEach(o => o.forms.forEach(f => { if (!FORM2VOCAB[f]) FORM2VOCAB[f] = o.k; }));
+  S.forEach((s, i) => (s?.n || []).forEach(([p, title, ex]) => {
+    let e = by[p];
+    if (!e) { e = by[p] = { p, title, ex, sents: [] }; EN_GRAM.push(e); }
+    if (ex.length > e.ex.length) e.ex = ex;
+    if (!e.sents.includes(i)) e.sents.push(i);
+  }));
+  EN_GRAM.sort((a, b) => b.sents.length - a.sents.length);
+  return { key, ED: data, S, IPA: data.ipa || {}, VOCAB, VOCAB_LIST, FORM2VOCAB, EN_GRAM };
+}
+const SRCS = {};
+if (window.EN_DATA) SRCS.off = buildSrc('off', window.EN_DATA);
+if (window.EN_AI) SRCS.ai = buildSrc('ai', window.EN_AI);
+let ED = null, EN_S = [], IPA = {}, VOCAB = {}, VOCAB_LIST = [], FORM2VOCAB = {}, EN_GRAM = [], EN_SRC = 'off';
+function setSrc(k) { const s = SRCS[k] || SRCS.off; if (!s) return; EN_SRC = s.key; ({ ED, S: EN_S, IPA, VOCAB, VOCAB_LIST, FORM2VOCAB, EN_GRAM } = s); }
+setSrc('off');
+// Bản nào đang dùng ở chỗ vừa chạm (popup giữ bản của nó; tab Bản dịch AI dùng bản AI)
+function ctxSrc(t) {
+  if (t.closest('#modal')) { const v = modalStack.at(-1); return v?.src || 'off'; }
+  return t.closest('#tab-english_ai') ? 'ai' : 'off';
+}
 const GLOSS = window.EN_GLOSS || {};
 function wordInfo(w) {
   const k = enKey(w), o = VOCAB[FORM2VOCAB[k] || k];
@@ -32,20 +50,8 @@ function wordInfo(w) {
   const g = GLOSS[k]; if (g) return { k, lemma: g[0], pos: g[1], m: g[2], vocab: false };
   return { k, lemma: w, pos: '', m: '', vocab: false };
 }
-const ipaOf = w => { const k = enKey(w); return IPA[k] || (k.includes(' ') ? k.split(/\s+/).map(x => IPA[x] || '').filter(Boolean).join(' ') : ''); };
-
-/* ---------- Ngữ pháp tiếng Anh: chỉ mục ---------- */
-const EN_GRAM = [];
-{
-  const by = {};
-  EN_S.forEach((s, i) => (s?.n || []).forEach(([p, title, ex]) => {
-    let e = by[p];
-    if (!e) { e = by[p] = { p, title, ex, sents: [] }; EN_GRAM.push(e); }
-    if (ex.length > e.ex.length) e.ex = ex;
-    if (!e.sents.includes(i)) e.sents.push(i);
-  }));
-  EN_GRAM.sort((a, b) => b.sents.length - a.sents.length);
-}
+const ipa1 = x => IPA[x] || SRCS.off?.IPA[x] || SRCS.ai?.IPA[x] || '';
+const ipaOf = w => { const k = enKey(w); return ipa1(k) || (k.includes(' ') ? k.split(/\s+/).map(ipa1).filter(Boolean).join(' ') : ''); };
 
 /* ---------- Hiển thị câu tiếng Anh (có phiên âm IPA trên từng từ) ---------- */
 function enReader(text, click = true) {
@@ -200,6 +206,7 @@ function sentVocab(i) {
   return (EN_S[i]?.v || []).map(([form, lemma]) => { const o = VOCAB[enKey(lemma || form)]; return o ? vocabCard(o, form) : ''; }).join('');
 }
 function enLessonPanel(i) {
+  setSrc('off');
   const s = EN_S[i]; if (!s) return '';
   if (!s.en) return `<div class="panel en-panel"><h3 class="sec-title" style="margin-top:0">🇬🇧 Tiếng Anh</h3><p class="muted">Câu này được bản tiếng Anh gộp chung với câu trước.</p></div>`;
   return `<div class="panel en-panel">
@@ -215,6 +222,7 @@ function enLessonPanel(i) {
 }
 // Tab "English" trong popup câu tiếng Trung
 function enSentPane(pane, i) {
+  setSrc('off');
   const s = EN_S[i];
   if (!s?.en) { pane.innerHTML = '<p class="muted">Câu này được bản tiếng Anh gộp chung với câu trước/sau.</p>'; return; }
   pane.innerHTML = `
@@ -231,13 +239,14 @@ function enSentPane(pane, i) {
 /* ---------- Popup: câu tiếng Anh ---------- */
 const EN_TABS = [['gram', '📐 Ngữ pháp'], ['words', '🔤 Từng từ'], ['vocab', '📚 Từ vựng'], ['read', '🗣 Luyện đọc'], ['write', '✍️ Luyện viết']];
 function enModal(v) {
+  setSrc(v.src || 'off');
   if (v.type === 'ensent') renderEnSent(v);
   else if (v.type === 'enword') renderEnWord(v.k);
   epUI();
 }
 function renderEnSent(v) {
   const i = v.i, s = EN_S[i], l = LESSON_LIST[i];
-  $('#modalTitle').textContent = `🇬🇧 Câu ${i + 1} / ${EN_S.length}`;
+  $('#modalTitle').textContent = `${EN_SRC === 'ai' ? '🤖 Bản AI · ' : '🇬🇧 '}Câu ${i + 1} / ${EN_S.length}`;
   const prev = (() => { let j = i - 1; while (j >= 0 && !EN_S[j]?.en) j--; return j; })();
   const next = (() => { let j = i + 1; while (j < EN_S.length && !EN_S[j]?.en) j++; return j < EN_S.length ? j : -1; })();
   $('#modalBody').innerHTML = `
@@ -245,6 +254,7 @@ function renderEnSent(v) {
       <div class="en-reader sv-reader">${enReader(s.en)}</div>
       <div class="muted small">👆 Chạm vào một từ để nghe, xem phiên âm và nghĩa</div>
       <div class="sv-vi">${esc(l.viOff)}</div>
+      ${otherVersion(i)}
       <div class="sv-zh hz">${esc(l.text)} <button class="link" data-sent-zh="${i}">中 Học câu tiếng Trung ›</button></div>
       <div class="sv-actions">
         <button class="btn" data-en-say="${i}">🔊 Nghe</button>
@@ -487,18 +497,25 @@ function enRange() {
   if (SECTIONS) { const S = SECTIONS[curSec()]; return { a: S.a, b: S.b }; }
   return { a: 0, b: LESSONS.length - 1 };
 }
-renderers.english = () => {
-  const el = $('#tab-english');
-  if (!ED) { el.innerHTML = '<div class="panel"><p class="muted">Bài này chưa có dữ liệu tiếng Anh.</p></div>'; return; }
+function renderEnTab(src) {
+  const id = src === 'ai' ? 'english_ai' : 'english', other = src === 'ai' ? 'english' : 'english_ai';
+  const oe = $('#tab-' + other); if (oe) oe.innerHTML = '';          // chỉ giữ 1 bộ phần tử #enBody
+  setSrc(src);
+  const el = $('#tab-' + id);
+  if (!SRCS[src]) { el.innerHTML = '<div class="panel"><p class="muted">Bài này chưa có dữ liệu.</p></div>'; return; }
   el.innerHTML = `
     <div class="tx-head">
-      <div><h2>🇬🇧 ${esc(BOOK.en || BOOK.vi)} <button class="btn sm book-sw" data-books>📚 Đổi bài</button></h2>
-        <p class="tx-hint">Học tiếng Anh qua bản dịch chính thức: nghe, phiên âm IPA, ngữ pháp, từ vựng, luyện đọc và luyện viết từng câu.</p></div>
+      <div><h2>${src === 'ai' ? '🤖' : '🇬🇧'} ${esc(BOOK.en || BOOK.vi)} <button class="btn sm book-sw" data-books>📚 Đổi bài</button></h2>
+        <p class="tx-hint">${src === 'ai'
+          ? '<b>Bản dịch tham khảo do AI dịch trực tiếp, sát nguyên văn chữ Hán</b> – mỗi câu chữ Hán một câu tiếng Anh, giữ đủ ý và giọng giảng. Dùng để học và đối chiếu, không thay thế bản dịch chính thức. Đủ tính năng: nghe, IPA, ngữ pháp, từ vựng, luyện đọc, luyện viết.'
+          : 'Học tiếng Anh qua bản dịch chính thức: nghe, phiên âm IPA, ngữ pháp, từ vựng, luyện đọc và luyện viết từng câu.'}</p></div>
     </div>
     <div class="seg en-views">${EN_VIEWS.map(([k, n]) => `<button class="${enView === k ? 'on' : ''}" data-en-view="${k}">${n}</button>`).join('')}</div>
     <div id="enBody"></div>`;
   drawEnView();
-};
+}
+renderers.english = () => renderEnTab('off');
+renderers.english_ai = () => renderEnTab('ai');
 function scrollSecNav() { $$('.sec-nav').forEach(n => { const on = n.querySelector('.on'); if (on) n.scrollLeft = on.offsetLeft - n.offsetLeft - 24; }); }
 function drawEnView() {
   const B = $('#enBody'); if (!B) return;
@@ -526,7 +543,7 @@ function drawEnRead(B) {
         <div class="sent-body"><div class="en-reader">${enReader(s.en, false)}</div><div class="sent-vi">${esc(LESSON_LIST[i].viOff)}</div><div class="en-zh hz">${esc(LESSON_LIST[i].text)}</div></div></div>`;
     }).join('')}</div>`).join('')}
     ${S ? `<div class="lesson-nav"><button class="btn" data-en-sec="${sec - 1}" ${sec === 0 ? 'disabled' : ''}>‹ Mục trước</button><span class="muted">Mục ${sec + 1} / ${SECTIONS.length}</span><button class="btn" data-en-sec="${sec + 1}" ${sec === SECTIONS.length - 1 ? 'disabled' : ''}>Mục sau ›</button></div>` : ''}
-    <p class="tx-src">English: <a href="${esc(ED.source || '#')}" target="_blank" rel="noopener">en.falundafa.org</a> · Phiên âm IPA theo giọng Mỹ (CMU Pronouncing Dictionary).</p>`;
+    <p class="tx-src">${EN_SRC === 'ai' ? 'Bản dịch AI (tham khảo) – dịch từ nguyên văn chữ Hán' : `English: <a href="${esc(ED.source || '#')}" target="_blank" rel="noopener">en.falundafa.org</a>`} · Phiên âm IPA theo giọng Mỹ (CMU Pronouncing Dictionary).</p>`;
 }
 function drawEnVocab(B) {
   if (EV) return drawEnReview(B);
@@ -651,9 +668,21 @@ function drawEnPractice(B) {
 }
 
 /* ---------- Sự kiện ---------- */
-function openEnSent(i, tab = 'gram', wm) { if (i < 0 || !EN_S[i]?.en) return; openModal({ type: 'ensent', i, tab, wm }); }
+function openEnSent(i, tab = 'gram', wm) { if (i < 0 || !EN_S[i]?.en) return; openModal({ type: 'ensent', i, tab, wm, src: EN_SRC }); }
+// Dòng so sánh với bản còn lại trong popup câu
+function otherVersion(i) {
+  const o = EN_SRC === 'ai' ? SRCS.off : SRCS.ai; if (!o) return '';
+  const t = o.S[i]?.en, c = SRCS.ai?.S[i]?.cmp;
+  return `<details class="ov"><summary>${EN_SRC === 'ai' ? '🇬🇧 So với bản chính thức' : '🤖 So với bản AI dịch sát'}${c ? ` · <span class="tagl">${c.tags.map(x => `<i class="tg tg-${tagCls(x)}">${esc(x)}</i>`).join('')}</span>` : ''}</summary>
+    <div class="ov-t">${t ? esc(t) : '<span class="muted">(bản chính thức gộp câu này vào câu trước/sau)</span>'}</div>
+    ${c?.note ? `<div class="ov-n">📝 ${esc(c.note)}</div>` : ''}
+    ${t ? `<button class="link" data-en-open="${i}" data-src-to="${o.key}">Học câu này ở ${o.key === 'ai' ? 'bản AI' : 'bản chính thức'} ›</button>` : ''}</details>`;
+}
+const tagCls = t => ({ 'sát': 'ok', 'diễn ý': 'para', 'lược bỏ': 'omit', 'thêm ý': 'add', 'đổi sắc thái': 'tone', 'thuật ngữ': 'term', 'gộp/tách câu': 'split', 'văn phong': 'style' }[t] || 'x');
 function enClick(e, t) {
-  const det = t.closest('[data-ew-detail]'); if (det) { openModal({ type: 'enword', k: det.dataset.ewDetail }); return true; }
+  setSrc(ctxSrc(t));
+  const sto = t.closest('[data-src-to]'); if (sto) { setSrc(sto.dataset.srcTo); const v = modalStack.at(-1); modalStack[modalStack.length - 1] = { type: 'ensent', i: +sto.dataset.enOpen, tab: v?.tab || 'gram', src: EN_SRC }; openModal(modalStack.at(-1), false); return true; }
+  const det = t.closest('[data-ew-detail]'); if (det) { openModal({ type: 'enword', k: det.dataset.ewDetail, src: EN_SRC }); return true; }
   const say = t.closest('[data-en-say]'); if (say) { epToggle(say); return true; }
   const all = t.closest('[data-en-all]'); if (all) { epAll(); return true; }
   const ws = t.closest('[data-en-word]'); if (ws) { $$('.ewrow.on').forEach(x => x.classList.remove('on')); if (ws.classList.contains('ewrow')) ws.classList.add('on'); sayWord(ws.dataset.enWord); return true; }
@@ -665,7 +694,7 @@ function enClick(e, t) {
   const rnd = t.closest('[data-en-rand]'); if (rnd) { const i = $('#enBody')._pick?.(); if (i != null) openEnSent(i, rnd.dataset.enRand, rnd.dataset.wm || undefined); return true; }
   const op = t.closest('[data-en-open]'); if (op) {
     const i = +op.dataset.enOpen, tab = op.dataset.enTab || 'gram';
-    if (!$('#modal').hidden && modalStack.at(-1)?.type === 'ensent') { modalStack[modalStack.length - 1] = { type: 'ensent', i, tab }; openModal(modalStack.at(-1), false); }
+    if (!$('#modal').hidden && modalStack.at(-1)?.type === 'ensent') { modalStack[modalStack.length - 1] = { type: 'ensent', i, tab, src: EN_SRC }; openModal(modalStack.at(-1), false); }
     else openEnSent(i, tab);
     return true;
   }
@@ -677,7 +706,7 @@ function enClick(e, t) {
   const ew = t.closest('[data-ew]'); if (ew) {
     const rd = ew.closest('.en-reader');
     if (rd) { showWordCard(rd, ew); return true; }
-    openModal({ type: 'enword', k: ew.dataset.ew }); return true;
+    openModal({ type: 'enword', k: ew.dataset.ew, src: EN_SRC }); return true;
   }
   const row = t.closest('[data-en-sent]'); if (row) { openEnSent(+row.dataset.enSent); return true; }
   return false;
@@ -692,5 +721,51 @@ const _applyToggles = applyToggles;
 function applyEnToggles() { document.body.classList.toggle('show-ipa', !!SETTINGS.ipa); document.body.classList.toggle('show-zh', !!SETTINGS.zhOn); }
 document.addEventListener('click', e => { if (e.target.closest('[data-pill="ipa"], [data-pill="zhOn"]')) setTimeout(() => { applyEnToggles(); $$('[data-pill="ipa"]').forEach(b => b.classList.toggle('on', !!SETTINGS.ipa)); }, 0); });
 applyEnToggles();
-if (!ED) $('#tabs [data-tab="english"]')?.remove();
+if (!SRCS.off) $('#tabs [data-tab="english"]')?.remove();
+if (!SRCS.ai) { $('#tabs [data-tab="english_ai"]')?.remove(); $('#tabs [data-tab="eval"]')?.remove(); }
+
+/* ---------- Tab "Đánh giá bản dịch" ---------- */
+const EVAL_TAGS = ['sát', 'diễn ý', 'lược bỏ', 'thêm ý', 'đổi sắc thái', 'thuật ngữ', 'gộp/tách câu', 'văn phong'];
+const TAG_DESC = { 'sát': 'đúng và đủ ý', 'diễn ý': 'viết lại theo ý, xa câu chữ', 'lược bỏ': 'thiếu ý / từ nhấn mạnh', 'thêm ý': 'có ý không có trong nguyên văn', 'đổi sắc thái': 'mức độ, giọng điệu khác', 'thuật ngữ': 'cách dịch thuật ngữ đáng bàn', 'gộp/tách câu': 'gộp, tách hoặc dời ý', 'văn phong': 'câu vụng, khó hiểu' };
+let evalTag = 'all', evalSec = 'all', evalShow = 40;
+renderers.eval = () => {
+  const el = $('#tab-eval'), A = SRCS.ai?.S || [], O = SRCS.off?.S || [];
+  const items = A.map((s, i) => ({ i, c: s?.cmp })).filter(x => x.c);
+  const cnt = {}; items.forEach(x => x.c.tags.forEach(t => cnt[t] = (cnt[t] || 0) + 1));
+  const n = items.length, ok = cnt['sát'] || 0;
+  const r = SECTIONS && evalSec !== 'all' ? SECTIONS[+evalSec] : null;
+  const list = items.filter(x => (evalTag === 'all' ? true : evalTag === 'issue' ? !x.c.tags.includes('sát') : x.c.tags.includes(evalTag)) && (!r || (x.i >= r.a && x.i <= r.b)));
+  el.innerHTML = `
+    <div class="panel ev-sum">
+      <h2>📝 Đánh giá bản dịch tiếng Anh chính thức <small>${esc(BOOK.vi)} · ${n} câu</small> <button class="btn sm book-sw" data-books>📚 Đổi bài</button></h2>
+      <p class="muted">Mỗi câu của bản tiếng Anh chính thức được đối chiếu với nguyên văn chữ Hán và với bản dịch AI dịch sát (tab 🤖). Nhận xét do AI soạn – mang tính tham khảo cho việc học, không thay thế bản dịch chính thức.</p>
+      <div class="ev-stats">
+        <div class="ev-big"><b>${Math.round(100 * ok / Math.max(1, n))}%</b><span>câu dịch sát, đủ ý</span></div>
+        <div class="ev-bars">${EVAL_TAGS.filter(t => cnt[t]).map(t => `<div class="ev-bar"><span class="tg tg-${tagCls(t)}">${esc(t)}</span><i style="width:${100 * cnt[t] / n}%"></i><b>${cnt[t]}</b><small>${esc(TAG_DESC[t])}</small></div>`).join('')}</div>
+      </div>
+      ${window.EN_EVAL_SUMMARY ? `<div class="ev-text">${EN_EVAL_SUMMARY}</div>` : ''}
+    </div>
+    <div class="toolbar ev-filter">
+      <select id="evTag"><option value="all">Tất cả câu (${n})</option><option value="issue">Có khác biệt (${n - ok})</option>${EVAL_TAGS.filter(t => cnt[t]).map(t => `<option value="${t}">${t} (${cnt[t]})</option>`).join('')}</select>
+      ${SECTIONS ? `<select id="evSec"><option value="all">Mọi mục</option>${SECTIONS.map((x, k) => `<option value="${k}">${k + 1}. ${esc(x.vi)}</option>`).join('')}</select>` : ''}
+      <span class="muted">${list.length} câu</span>
+    </div>
+    <div class="ev-list">${list.slice(0, evalShow).map(({ i, c }) => `
+      <div class="panel ev-item">
+        <div class="ev-head"><b>Câu ${i + 1}</b> ${c.tags.map(t => `<i class="tg tg-${tagCls(t)}">${esc(t)}</i>`).join('')}</div>
+        <div class="hz ev-zh">${esc(LESSON_LIST[i].text)}</div>
+        <div class="ev-row"><span class="ev-lbl">🇬🇧 Chính thức</span><div>${O[i]?.en ? esc(O[i].en) : '<span class="muted">(gộp vào câu trước/sau)</span>'}</div>${O[i]?.en ? `<button class="icon" data-ev-say="off:${i}" title="Nghe">🔊</button>` : '<span></span>'}</div>
+        <div class="ev-row"><span class="ev-lbl">🤖 Bản AI</span><div>${esc(A[i].en)}</div><button class="icon" data-ev-say="ai:${i}" title="Nghe">🔊</button></div>
+        ${c.note ? `<div class="ev-note">📝 ${esc(c.note)}</div>` : ''}
+        <div class="btn-row"><button class="btn sm" data-ev-open="off:${i}" ${O[i]?.en ? '' : 'disabled'}>Học bản chính thức ›</button><button class="btn sm" data-ev-open="ai:${i}">Học bản AI ›</button><button class="btn sm" data-sent-zh="${i}">中 Câu chữ Hán ›</button></div>
+      </div>`).join('')}</div>
+    ${list.length > evalShow ? `<div style="text-align:center;margin:14px 0"><button class="btn" id="evMore">Xem thêm (${list.length - evalShow} câu)</button></div>` : ''}`;
+  $('#evTag').value = evalTag; $('#evTag').onchange = e => { evalTag = e.target.value; evalShow = 40; renderers.eval(); };
+  if ($('#evSec')) { $('#evSec').value = evalSec; $('#evSec').onchange = e => { evalSec = e.target.value; evalShow = 40; renderers.eval(); }; }
+  if ($('#evMore')) $('#evMore').onclick = () => { evalShow += 60; renderers.eval(); };
+};
+document.addEventListener('click', e => {
+  const sy = e.target.closest('[data-ev-say]'); if (sy) { const [s, i] = sy.dataset.evSay.split(':'); setSrc(s); stopSpeech(); playFiles(enSentFiles(+i) || [], () => ttsEn(EN_S[+i].en)); return; }
+  const op = e.target.closest('[data-ev-open]'); if (op && !op.disabled) { const [s, i] = op.dataset.evOpen.split(':'); setSrc(s); openEnSent(+i); }
+});
 const _closeModal = closeModal;

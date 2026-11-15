@@ -1222,6 +1222,7 @@ document.addEventListener('click', e => {
   const svt = t.closest('[data-sv-tab]'); if (svt) { const v = modalStack.at(-1); v.tab = svt.dataset.svTab; $$('[data-sv-tab]').forEach(b => b.classList.toggle('on', b === svt)); activeWriter = null; drawSentPane(v); return; }
   const svn = t.closest('[data-sv-nav]'); if (svn && !svn.disabled) { e.preventDefault(); const v = modalStack.at(-1); modalStack[modalStack.length - 1] = { type: 'sent', i: +svn.dataset.svNav, tab: v?.type === 'sent' ? v.tab : 'gram', wc: 0 }; openModal(modalStack.at(-1), false); return; }
   const svw = t.closest('[data-sv-wc]'); if (svw && !svw.disabled) { const v = modalStack.at(-1); v.wc = +svw.dataset.svWc; drawSentPane(v); return; }
+  if (t.closest('[data-ev-say], [data-ev-open]')) return;
   if (t.closest('[data-en-say], [data-en-open]') && typeof enClick === 'function' && enClick(e, t)) return;
   const sent = t.closest('[data-sent]'); if (sent && !t.closest('#modal')) return openSent(+sent.dataset.sent);
   const bk = t.closest('[data-book]'); if (bk) return switchBook(bk.dataset.book);

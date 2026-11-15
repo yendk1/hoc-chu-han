@@ -223,10 +223,41 @@ zs, zw = en_book(ANN, N, 'https://en.falundafa.org/eng/zfl2014/zfl_2014_1.html',
 ls, lw = en_book(LUN, 20, 'https://en.falundafa.org/eng/zfl2014/zfl_2014_0.html', 'audio/en/lunyu/', R('js', 'books', 'lunyu', 'en.js'),
                  '// Luận ngữ – tiếng Anh (bản dịch chính thức 2015), ngữ pháp & từ vựng từng câu (tự sinh)')
 
+# ---------- bản dịch AI (dịch sát nguyên văn) + đánh giá bản chính thức ----------
+def load_ai(pattern):
+    out = {}
+    for f in glob.glob(J('outai', pattern, 'p*.json')):
+        for x in json.load(open(f, encoding='utf8'))['sents']: out[x['i']] = x
+    return out
+def ai_book(book, n, src_map, out_path):
+    if not src_map: return [], set()
+    sents, ipa_all, words = [], {}, set()
+    for i in range(n):
+        a = src_map.get(i, {})
+        e = {'en': a.get('en', ''), 'eg': a.get('eg') or [], 'n': a.get('en_n') or [], 'v': a.get('v') or [], 'cmp': a.get('cmp')}
+        sents.append(e); ipa_all.update(ipa_for(e['en']))
+        for w in WORD_RE.findall(e['en']): words.add(w.replace('’', "'"))
+        for v in e['v']:
+            for w in (v[0], v[1]):
+                if w and w.strip(): ipa_all.update(ipa_for(w)); words.add(w.strip())
+    data = {'source': 'ai', 'audio': f'audio/en-ai/{book}/', 'sents': sents, 'ipa': ipa_all}
+    summ = J(f'evalsum_{book}.html')
+    with open(out_path, 'w', encoding='utf8') as f:
+        f.write('// Bản dịch tiếng Anh tham khảo do AI dịch sát nguyên văn + đánh giá bản chính thức (tự sinh)\n')
+        f.write('window.EN_AI = ' + json.dumps(data, ensure_ascii=False, separators=(',', ':')) + ';\n')
+        if os.path.exists(summ): f.write('window.EN_EVAL_SUMMARY = ' + json.dumps(open(summ, encoding='utf8').read(), ensure_ascii=False) + ';\n')
+    return sents, words
+AZ = load_ai('b0*'); AL = load_ai('b10')
+print('bản AI:', len(AZ), '/', N, '· Luận ngữ:', len(AL))
+azs, azw = ai_book('zfl1', N, AZ, R('js', 'books', 'zfl1', 'en_ai.js'))
+als, alw = ai_book('lunyu', 20, AL, R('js', 'books', 'lunyu', 'en_ai.js'))
+zw |= azw; lw |= alw
+
 # ---------- nghĩa các từ thông dụng (ngoài danh sách từ vựng) ----------
 GL = {}
-if os.path.exists(J('enwords_out.txt')):
-    for l in open(J('enwords_out.txt'), encoding='utf8'):
+for gf in ('enwords_out.txt', 'enwords_out2.txt'):
+    if not os.path.exists(J(gf)): continue
+    for l in open(J(gf), encoding='utf8'):
         p = l.rstrip('\n').split('|')
         if len(p) == 4 and p[0]: GL[en_key(p[0])] = [p[1], p[2], p[3]]
 with open(R('js', 'data-en-gloss.js'), 'w', encoding='utf8') as f:
@@ -240,6 +271,9 @@ jobs = []
 for book, sents in (('zfl1', zs), ('lunyu', ls)):
     for i, e in enumerate(sents):
         if e['en']: jobs.append([R('audio', 'en', book, f'e{i}.mp3'), e['en'], 'en-US-AvaNeural', '-5%'])
+for book, sents in (('zfl1', azs), ('lunyu', als)):
+    for i, e in enumerate(sents):
+        if e['en']: jobs.append([R('audio', 'en-ai', book, f'e{i}.mp3'), e['en'], 'en-US-AndrewNeural', '-5%'])
 all_words = sorted({slug(w): w for w in zw | lw if slug(w)}.items())
 for sl, w in all_words: jobs.append([R('audio', 'en', 'w', f'{sl}.mp3'), w, 'en-US-AvaNeural', '-10%'])
 key = lambda t: '-'.join('%x' % ord(c) for c in t)

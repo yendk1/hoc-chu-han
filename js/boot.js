@@ -6,13 +6,13 @@
       id: 'lunyu', zh: '論語', vi: 'Luận ngữ', en: 'Lunyu', short: 'Luận ngữ',
       desc: '20 câu · 250 chữ – bài mở đầu, ngữ pháp phân tích kỹ từng câu.',
       audio: 'audio/', slowFiles: true,
-      files: ['js/data-words.js', 'js/data-grammar.js', 'js/data-vi.js', 'js/books/lunyu/en.js'],
+      files: ['js/data-words.js', 'js/data-grammar.js', 'js/data-vi.js', 'js/books/lunyu/en.js', 'js/books/lunyu/en_ai.js'],
     },
     zfl1: {
       id: 'zfl1', zh: '轉法輪 · 第一講', vi: 'Chuyển Pháp Luân – Bài giảng thứ nhất', en: 'Zhuan Falun – Lecture One', short: 'Bài giảng 1',
       desc: '7 mục · 672 câu · ~1000 chữ – có bản tiếng Việt và tiếng Anh từng câu.',
       audio: 'audio/zfl1/', slowFiles: false,
-      files: ['js/books/zfl1/words.js', 'js/books/zfl1/grammar.js', 'js/books/zfl1/vi.js', 'js/books/zfl1/en.js'],
+      files: ['js/books/zfl1/words.js', 'js/books/zfl1/grammar.js', 'js/books/zfl1/vi.js', 'js/books/zfl1/en.js', 'js/books/zfl1/en_ai.js'],
     },
   };
   var id = null;
