@@ -292,7 +292,9 @@ body:not(.show-py) .ch .py, body:not(.show-hv) .ch .hv { visibility: hidden; hei
   .topbar { padding: 6px 10px 0; gap: 4px 8px; flex-wrap: wrap; }
   .brand { flex: 1; min-width: 0; gap: 8px; }
   .brand small { display: none; }
-  .brand b { font-size: 15px; white-space: nowrap; }
+  .brand b { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .brand > div { min-width: 0; }
+  @media (max-width: 400px) { .brand > div { display: none; } }
   .logo { width: 32px; height: 32px; font-size: 21px; border-radius: 8px; }
   .top-right { gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
   .tgl { font-size: 12px; }
@@ -550,7 +552,7 @@ body.show-zh .en-zh { display: block; }
 .practice-card b { font-size: 17px; }
 .practice-card:hover { border-color: #4a86c5; }
 @media (max-width: 900px) {
-  .book-btn span { display: none; }
+  .book-btn { padding: 4px 10px; font-size: 12px; max-width: 46vw; overflow: hidden; text-overflow: ellipsis; }
   .en-reader { font-size: 17px; } .en-reader.big { font-size: 19px; }
   .ew-word.big { font-size: 34px; }
 }
