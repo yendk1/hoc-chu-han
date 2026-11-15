@@ -1,6 +1,6 @@
 // Service worker: giúp app chạy offline và cài được lên điện thoại.
 // Khi phát hành bản mới: tăng VERSION để người dùng nhận bản cập nhật.
-const VERSION = 'v2.0.0';
+const VERSION = 'v2.1.0';
 const APP_CACHE = 'hht-app-' + VERSION;
 const DATA_CACHE = 'hht-data';      // nét chữ, font, thư viện ngoài (ít thay đổi)
 
@@ -8,7 +8,7 @@ const APP_SHELL = [
   './', 'index.html', 'manifest.webmanifest',
   'css/style.css',
   'js/vendor/hanzi-writer.min.js', 'js/boot.js', 'js/data-chars.js', 'js/data-chars2.js', 'js/data-components.js',
-  'js/data-words.js', 'js/data-grammar.js', 'js/data-audio.js', 'js/data-vi.js', 'js/app.js', 'js/english.js',
+  'js/data-words.js', 'js/data-grammar.js', 'js/data-audio.js', 'js/data-en-gloss.js', 'js/data-vi.js', 'js/app.js', 'js/english.js',
   'js/books/lunyu/en.js', 'js/books/zfl1/words.js', 'js/books/zfl1/grammar.js', 'js/books/zfl1/vi.js', 'js/books/zfl1/en.js',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/favicon.png',
 ];

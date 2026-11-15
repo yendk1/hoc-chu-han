@@ -209,6 +209,7 @@ def en_book(sents_by_i, n, source, audio_dir, out_path, comment):
         e = {'en': a.get('en', ''), 'eg': a.get('eg') or [], 'n': a.get('en_n') or [], 'v': a.get('v') or []}
         sents.append(e)
         ipa_all.update(ipa_for(e['en']))
+        for w in WORD_RE.findall(e['en']): words.add(w.replace('’', "'"))
         for v in e['v']:
             for w in (v[0], v[1]):
                 if w and w.strip(): ipa_all.update(ipa_for(w)); words.add(w.strip())
@@ -221,6 +222,17 @@ zs, zw = en_book(ANN, N, 'https://en.falundafa.org/eng/zfl2014/zfl_2014_1.html',
                  '// Bài giảng thứ nhất – tiếng Anh (bản dịch chính thức 2014), ngữ pháp & từ vựng từng câu (tự sinh)')
 ls, lw = en_book(LUN, 20, 'https://en.falundafa.org/eng/zfl2014/zfl_2014_0.html', 'audio/en/lunyu/', R('js', 'books', 'lunyu', 'en.js'),
                  '// Luận ngữ – tiếng Anh (bản dịch chính thức 2015), ngữ pháp & từ vựng từng câu (tự sinh)')
+
+# ---------- nghĩa các từ thông dụng (ngoài danh sách từ vựng) ----------
+GL = {}
+if os.path.exists(J('enwords_out.txt')):
+    for l in open(J('enwords_out.txt'), encoding='utf8'):
+        p = l.rstrip('\n').split('|')
+        if len(p) == 4 and p[0]: GL[en_key(p[0])] = [p[1], p[2], p[3]]
+with open(R('js', 'data-en-gloss.js'), 'w', encoding='utf8') as f:
+    f.write('// Nghĩa tiếng Việt của các từ tiếng Anh thông dụng trong bài (ngoài danh sách từ vựng) – tự sinh\n')
+    f.write('window.EN_GLOSS = ' + json.dumps(GL, ensure_ascii=False, separators=(',', ':')) + ';\n')
+print('nghĩa từ thông dụng:', len(GL))
 
 # ---------- âm thanh còn thiếu ----------
 slug = lambda w: re.sub(r'[^a-z0-9]+', '_', en_key(w))

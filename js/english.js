@@ -25,6 +25,13 @@ EN_S.forEach((s, i) => (s?.v || []).forEach(([form, lemma, pos, m]) => {
 }));
 const FORM2VOCAB = {};
 VOCAB_LIST.forEach(o => o.forms.forEach(f => { if (!FORM2VOCAB[f]) FORM2VOCAB[f] = o.k; }));
+const GLOSS = window.EN_GLOSS || {};
+function wordInfo(w) {
+  const k = enKey(w), o = VOCAB[FORM2VOCAB[k] || k];
+  if (o) return { k: o.k, lemma: o.lemma, pos: o.pos, m: o.means[0] || '', vocab: true };
+  const g = GLOSS[k]; if (g) return { k, lemma: g[0], pos: g[1], m: g[2], vocab: false };
+  return { k, lemma: w, pos: '', m: '', vocab: false };
+}
 const ipaOf = w => { const k = enKey(w); return IPA[k] || (k.includes(' ') ? k.split(/\s+/).map(x => IPA[x] || '').filter(Boolean).join(' ') : ''); };
 
 /* ---------- Ngữ pháp tiếng Anh: chỉ mục ---------- */
@@ -42,9 +49,10 @@ const EN_GRAM = [];
 
 /* ---------- Hiển thị câu tiếng Anh (có phiên âm IPA trên từng từ) ---------- */
 function enReader(text, click = true) {
-  return esc(text).replace(/[A-Za-z][A-Za-z’'\-]*[A-Za-z]|[A-Za-z]/g, w => {
+  // dấu câu dính liền vào từ đứng cạnh (không bị cách ra vì khoảng giãn giữa các từ)
+  return esc(text).replace(/((?:[“‘(\[]|&quot;|&#39;)*)([A-Za-z][A-Za-z’'\-]*[A-Za-z]|[A-Za-z])((?:[.,;:!?”’)\]—–…]|&quot;|&#39;)*)/g, (m, pre, w, post) => {
     const ip = ipaOf(w.replace(/&#39;/g, "'"));
-    return `<span class="ew"${click ? ` data-ew="${esc(enKey(w))}"` : ''}><span class="ipa">${ip ? esc(ip) : '&nbsp;'}</span><span class="et">${w}</span></span>`;
+    return `<span class="ew"${click ? ` data-ew="${esc(enKey(w))}"` : ''}><span class="ipa">${ip ? esc(ip) : '&nbsp;'}</span><span class="et">${pre}${w}${post}</span></span>`;
   });
 }
 const enSnippet = (text, forms) => {
@@ -96,7 +104,7 @@ function epUI() {
   $$('.en-row.playing').forEach(el => el.classList.remove('playing'));
   if (EP.all) $(`.en-row[data-en-sent="${EP.all.i}"]`)?.classList.add('playing');
 }
-function epReset() { if (EP.key === null && !EP.all) return; EP.key = null; EP.paused = false; EP.token = -1; EP.all = null; epUI(); }
+function epReset() { wseqTok++; if (EP.key === null && !EP.all) return; EP.key = null; EP.paused = false; EP.token = -1; EP.all = null; epUI(); }
 function enSentFiles(i) { return ED?.audio ? [`${ED.audio}e${i}.mp3`] : null; }
 function epToggle(b) {
   const i = +b.dataset.enSay, slow = b.hasAttribute('data-slow'), k = i + (slow ? 's' : '');
@@ -122,6 +130,48 @@ function epAll() {
     const tok = playToken; EP.token = tok; EP.all = all;
   };
   EP.paused = false; step(r.a);
+}
+
+// Các từ trong câu (giữ thứ tự, không lặp)
+function sentWords(text) {
+  const seen = new Set(), out = [];
+  for (const w of text.match(/[A-Za-z][A-Za-z’'\-]*[A-Za-z]|[A-Za-z]/g) || []) { const k = enKey(w); if (k && !seen.has(k)) { seen.add(k); out.push(w.replace(/’/g, "'")); } }
+  return out;
+}
+// Phát 1 từ, trả về Promise khi đọc xong
+function playOneWord(w) {
+  return new Promise(res => {
+    const s = wSlug(w);
+    if (EN_WAUDIO.has(s)) { playFiles([`audio/en/w/${s}.mp3`], () => { ttsEn(w, 0.85); setTimeout(res, 900); }, 1, res); return; }
+    if (!('speechSynthesis' in window)) return res();
+    speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(w); u.lang = enVoice?.lang || 'en-US'; if (enVoice) u.voice = enVoice; u.rate = 0.85;
+    u.onend = u.onerror = () => res(); speechSynthesis.speak(u); setTimeout(res, 2500);
+  });
+}
+let wseqTok = 0;
+async function playWordSeq(words) {
+  stopSpeech(); const tok = ++wseqTok;
+  for (let k = 0; k < words.length; k++) {
+    if (tok !== wseqTok) return;
+    $$('.ewrow').forEach(x => x.classList.toggle('on', +x.dataset.wk === k));
+    $(`.ewrow[data-wk="${k}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    await playOneWord(words[k]); if (tok !== wseqTok) return;
+    await new Promise(r => setTimeout(r, 250));
+  }
+  $$('.ewrow.on').forEach(x => x.classList.remove('on'));
+}
+// Thẻ nhỏ khi chạm 1 từ trong câu: đọc ngay + phiên âm + nghĩa
+function showWordCard(rd, ew) {
+  const word = (ew.querySelector('.et').textContent.match(/[A-Za-z][A-Za-z’'\-]*[A-Za-z]|[A-Za-z]/) || [''])[0].replace(/’/g, "'"), f = wordInfo(word), ip = ipaOf(word);
+  rd.querySelectorAll('.ew.sel').forEach(x => x.classList.remove('sel')); ew.classList.add('sel');
+  let card = rd.nextElementSibling?.classList.contains('ew-card') ? rd.nextElementSibling : null;
+  if (!card) { card = document.createElement('div'); card.className = 'ew-card'; rd.after(card); }
+  card.innerHTML = `<div class="ewc-top"><b class="ewc-w">${esc(word)}</b><span class="ewr-ipa">${ip ? '/' + esc(ip) + '/' : ''}</span>
+      <button class="icon" data-en-word="${esc(word)}" title="Nghe lại">🔊</button></div>
+    <div class="ewr-m">${f.pos ? `<i>${esc(POS[f.pos] || f.pos)}</i> · ` : ''}${esc(f.m) || '<span class="muted">—</span>'}${f.lemma && enKey(f.lemma) !== enKey(word) ? ` <small class="muted">(dạng gốc: ${esc(f.lemma)})</small>` : ''}</div>
+    <div class="ewc-spell"><span class="muted">Cách viết:</span> ${[...word].map(c => `<span class="ltr">${esc(c)}</span>`).join('')} <span class="muted">(${word.replace(/[^A-Za-z]/g, '').length} chữ cái)</span>
+      <button class="link" data-ew-detail="${esc(f.k)}">Chi tiết & ví dụ ›</button></div>`;
+  sayWord(word);
 }
 
 /* ---------- Khung tiếng Anh trong tab Bài học & popup câu ---------- */
@@ -155,8 +205,9 @@ function enLessonPanel(i) {
   return `<div class="panel en-panel">
     <div class="lesson-head"><h3 class="sec-title" style="margin:0">🇬🇧 Tiếng Anh <small>bản dịch chính thức</small></h3>
       <div class="btn-row"><button class="btn" data-en-say="${i}">🔊 Nghe</button><button class="btn" data-en-say="${i}" data-slow>🐢 Chậm</button>
+      <button class="btn primary" data-en-open="${i}">📖 Học câu này</button>
       <button class="btn" data-en-open="${i}" data-en-tab="read">🗣 Luyện đọc</button><button class="btn" data-en-open="${i}" data-en-tab="write">✍️ Luyện viết</button></div></div>
-    <div class="en-reader big">${enReader(s.en)}</div>
+    <div class="en-reader big">${enReader(s.en)}</div><p class="muted small" style="margin:-6px 0 8px">👆 Chạm vào một từ để nghe và xem phiên âm, nghĩa.</p>
     <details class="en-more" open><summary>📐 Ngữ pháp câu tiếng Anh</summary>${enChunks(s.eg)}<div class="g-notes">${enNotes(s, i)}</div></details>
     <h4 class="sec-title" style="font-size:15px">📚 Từ vựng <small>bấm vào từ để nghe, xem nghĩa và ví dụ</small></h4>
     <div class="vgrid">${sentVocab(i)}</div>
@@ -169,6 +220,7 @@ function enSentPane(pane, i) {
   pane.innerHTML = `
     <div class="en-reader">${enReader(s.en)}</div>
     <div class="btn-row" style="margin:10px 0"><button class="btn" data-en-say="${i}">🔊 Nghe</button><button class="btn" data-en-say="${i}" data-slow>🐢 Chậm</button>
+      <button class="btn primary" data-en-open="${i}">📖 Học câu này</button>
       <button class="btn" data-en-open="${i}" data-en-tab="read">🗣 Luyện đọc</button><button class="btn" data-en-open="${i}" data-en-tab="write">✍️ Luyện viết</button></div>
     <div class="sv-h">Cấu trúc câu</div>${enChunks(s.eg)}
     <div class="sv-h">Điểm ngữ pháp</div><div class="sv-notes">${enNotes(s, i)}</div>
@@ -177,7 +229,7 @@ function enSentPane(pane, i) {
 }
 
 /* ---------- Popup: câu tiếng Anh ---------- */
-const EN_TABS = [['gram', '📐 Ngữ pháp'], ['vocab', '📚 Từ vựng'], ['read', '🗣 Luyện đọc'], ['write', '✍️ Luyện viết']];
+const EN_TABS = [['gram', '📐 Ngữ pháp'], ['words', '🔤 Từng từ'], ['vocab', '📚 Từ vựng'], ['read', '🗣 Luyện đọc'], ['write', '✍️ Luyện viết']];
 function enModal(v) {
   if (v.type === 'ensent') renderEnSent(v);
   else if (v.type === 'enword') renderEnWord(v.k);
@@ -191,6 +243,7 @@ function renderEnSent(v) {
   $('#modalBody').innerHTML = `
     <div class="sv-top">
       <div class="en-reader sv-reader">${enReader(s.en)}</div>
+      <div class="muted small">👆 Chạm vào một từ để nghe, xem phiên âm và nghĩa</div>
       <div class="sv-vi">${esc(l.viOff)}</div>
       <div class="sv-zh hz">${esc(l.text)} <button class="link" data-sent-zh="${i}">中 Học câu tiếng Trung ›</button></div>
       <div class="sv-actions">
@@ -213,6 +266,16 @@ function drawEnPane(v) {
     pane.innerHTML = `<p class="sv-lead">Câu tiếng Anh được chia thành các <b>cụm</b>; màu cho biết vai trò trong câu, dòng nhỏ là nghĩa tiếng Việt.</p>
       ${enRoleLegend()}${enChunks(s.eg)}
       <div class="sv-h">Điểm ngữ pháp (${(s.n || []).length})</div><div class="sv-notes">${enNotes(s, i)}</div>`;
+  } else if (v.tab === 'words') {
+    const toks = sentWords(s.en);
+    pane.innerHTML = `<p class="sv-lead">${toks.length} từ trong câu, theo thứ tự. Chạm vào dòng để nghe; ⓘ để xem chi tiết và câu ví dụ khác.</p>
+      <div class="btn-row" style="margin-bottom:10px"><button class="btn primary" id="wsAll">▶ Nghe lần lượt từng từ</button><button class="btn" data-en-say="${i}">🔊 Nghe cả câu</button></div>
+      <div class="ew-list">${toks.map((w, k) => { const f = wordInfo(w), ip = ipaOf(w);
+        return `<div class="ewrow ${f.vocab ? 'is-vocab' : ''}" data-en-word="${esc(w)}" data-wk="${k}">
+          <span class="ewr-w">${esc(w)}</span><span class="ewr-ipa">${ip ? '/' + esc(ip) + '/' : ''}</span>
+          <span class="ewr-m">${f.pos ? `<i>${esc(POS[f.pos] || f.pos)}</i> ` : ''}${esc(f.m)}${f.lemma && enKey(f.lemma) !== enKey(w) ? ` <small>(← ${esc(f.lemma)})</small>` : ''}</span>
+          <button class="icon ewr-more" data-ew-detail="${esc(f.k)}" title="Chi tiết">ⓘ</button></div>`; }).join('')}</div>`;
+    $('#wsAll').onclick = () => playWordSeq(toks);
   } else if (v.tab === 'vocab') {
     pane.innerHTML = `<p class="sv-lead">Từ nên học trong câu. Chạm vào từ để nghe phát âm, xem nghĩa và các câu khác có từ này.</p>
       <div class="vgrid">${sentVocab(i)}</div>
@@ -319,12 +382,49 @@ async function recordSelf() {
 }
 
 /* ---------- Luyện viết: nghe – chép, điền từ, xếp cụm ---------- */
-const WMODES = [['dict', '🎧 Nghe – chép'], ['cloze', '🔤 Điền từ'], ['order', '🧱 Xếp cụm']];
+const WMODES = [['spell', '✏️ Viết từng từ'], ['dict', '🎧 Nghe – chép câu'], ['cloze', '🔤 Điền từ'], ['order', '🧱 Xếp cụm']];
 function drawWritePane(pane, v) {
-  const i = v.i, s = EN_S[i]; v.wm ||= 'dict';
+  const i = v.i, s = EN_S[i]; v.wm ||= 'spell';
   pane.innerHTML = `<div class="seg sm">${WMODES.map(([k, n]) => `<button class="${v.wm === k ? 'on' : ''}" data-en-wm="${k}">${n}</button>`).join('')}</div><div id="wrPane"></div>`;
   const P = $('#wrPane');
-  if (v.wm === 'dict') {
+  if (v.wm === 'spell') {
+    const list = [...new Set(sentWords(s.en).filter(w => w.length >= 3).map(w => w))];
+    v.sp ||= { k: 0, good: 0, done: [] };
+    const st = v.sp;
+    if (st.k >= list.length) {
+      P.innerHTML = `<div class="rv-card" style="text-align:center"><div class="rd-score ${st.good === list.length ? 'good' : 'mid'}">${st.good}/${list.length}</div><p class="muted">từ viết đúng ngay lần đầu</p>
+        <div class="btn-row" style="justify-content:center"><button class="btn primary" id="spAgain">Luyện lại</button></div>
+        ${st.done.filter(x => !x.ok).length ? `<p>Cần xem lại: ${st.done.filter(x => !x.ok).map(x => `<b>${esc(x.w)}</b>`).join(', ')}</p>` : ''}</div>`;
+      $('#spAgain').onclick = () => { v.sp = null; drawWritePane(pane, v); };
+      return;
+    }
+    const w = list[st.k], f = wordInfo(w), ip = ipaOf(w);
+    P.innerHTML = `<p class="sv-lead">Nghe từ, xem nghĩa rồi gõ đúng chính tả (từ ${st.k + 1}/${list.length}).</p>
+      <div class="sp-card">
+        <div class="btn-row" style="justify-content:center"><button class="btn" data-en-word="${esc(w)}">🔊 Nghe từ</button><button class="btn" id="spHint">💡 Gợi ý</button><button class="btn" id="spShow">👁 Xem cách viết</button></div>
+        <div class="ewr-ipa" style="font-size:19px;margin-top:8px">${ip ? '/' + esc(ip) + '/' : ''}</div>
+        <div class="ewr-m" style="font-size:16px">${f.pos ? `<i>${esc(POS[f.pos] || f.pos)}</i> ` : ''}${esc(f.m) || '<span class="muted">(nghe và viết lại)</span>'}</div>
+        <div id="spHintBox" class="dc-hint"></div>
+        <input id="spIn" class="en-input" style="text-align:center;font-size:24px" autocapitalize="off" autocomplete="off" spellcheck="false" placeholder="gõ từ…">
+        <div class="btn-row" style="justify-content:center"><button class="btn primary" id="spCheck">Kiểm tra</button><button class="btn" id="spSkip">Bỏ qua ›</button></div>
+        <div id="spOut"></div>
+        <div class="sp-ctx">${enSnippet(s.en, new Set([enKey(w)])).replace('<mark>', '<mark class="blank">')}</div>
+      </div>`;
+    P.querySelector('.sp-ctx mark.blank').textContent = w.replace(/[A-Za-z]/g, '_');
+    let tries = 0, hints = 0;
+    const next = ok => { st.done.push({ w, ok }); if (ok) st.good++; st.k++; setTimeout(() => drawWritePane(pane, v), ok ? 700 : 0); };
+    const check = () => {
+      const ok = $('#spIn').value.trim().toLowerCase().replace(/[’']/g, "'") === w.toLowerCase().replace(/[’']/g, "'");
+      $('#spIn').classList.toggle('ok', ok); $('#spIn').classList.toggle('bad', !ok);
+      if (ok) { $('#spOut').innerHTML = '<div class="quiz-msg ok">✓ Đúng rồi!</div>'; next(tries === 0 && hints === 0); }
+      else { tries++; $('#spOut').innerHTML = `<div class="quiz-msg bad">Chưa đúng – thử lại${tries >= 2 ? ` (đáp án: <b>${esc(w)}</b>)` : ''}</div>`; }
+    };
+    $('#spCheck').onclick = check; $('#spIn').onkeydown = e => { if (e.key === 'Enter') check(); };
+    $('#spHint').onclick = () => { hints++; $('#spHintBox').textContent = w.slice(0, hints) + w.slice(hints).replace(/[A-Za-z]/g, '_'); };
+    $('#spShow').onclick = () => { hints = 9; $('#spHintBox').innerHTML = `<b style="font-size:22px;letter-spacing:2px">${esc(w)}</b> <span class="muted">– ${w.length} chữ cái: ${[...w].map(esc).join(' · ')}</span>`; };
+    $('#spSkip').onclick = () => next(false);
+    playOneWord(w); setTimeout(() => $('#spIn')?.focus({ preventScroll: true }), 80);
+  } else if (v.wm === 'dict') {
     P.innerHTML = `<p class="sv-lead">Nghe câu (bấm nhiều lần, có thể nghe chậm) rồi gõ lại chính xác. Không cần phân biệt hoa/thường.</p>
       <div class="btn-row"><button class="btn" data-en-say="${i}">🔊 Nghe</button><button class="btn" data-en-say="${i}" data-slow>🐢 Chậm</button><button class="btn" id="dcHint">💡 Gợi ý chữ cái đầu</button></div>
       <div id="dcHintBox" class="muted dc-hint"></div>
@@ -553,9 +653,10 @@ function drawEnPractice(B) {
 /* ---------- Sự kiện ---------- */
 function openEnSent(i, tab = 'gram', wm) { if (i < 0 || !EN_S[i]?.en) return; openModal({ type: 'ensent', i, tab, wm }); }
 function enClick(e, t) {
+  const det = t.closest('[data-ew-detail]'); if (det) { openModal({ type: 'enword', k: det.dataset.ewDetail }); return true; }
   const say = t.closest('[data-en-say]'); if (say) { epToggle(say); return true; }
   const all = t.closest('[data-en-all]'); if (all) { epAll(); return true; }
-  const ws = t.closest('[data-en-word]'); if (ws) { sayWord(ws.dataset.enWord); return true; }
+  const ws = t.closest('[data-en-word]'); if (ws) { $$('.ewrow.on').forEach(x => x.classList.remove('on')); if (ws.classList.contains('ewrow')) ws.classList.add('on'); sayWord(ws.dataset.enWord); return true; }
   const tts = t.closest('[data-en-tts]'); if (tts) { stopSpeech(); ttsEn(tts.dataset.enTts, 0.85); return true; }
   const vw = t.closest('[data-en-view]'); if (vw) { enView = vw.dataset.enView; EV = null; renderers.english(); return true; }
   const es = t.closest('[data-en-sec]'); if (es) { if (es.disabled) return true; stopSpeech(); setSecQuiet(+es.dataset.enSec); drawEnView(); window.scrollTo({ top: 0 }); return true; }
@@ -573,7 +674,11 @@ function enClick(e, t) {
   const wm = t.closest('[data-en-wm]'); if (wm) { const v = modalStack.at(-1); v.wm = wm.dataset.enWm; drawEnPane(v); return true; }
   const stb = t.closest('[data-en-status]'); if (stb) { const k = modalStack.at(-1)?.k; if (k) { setStatus('en:' + k, stb.dataset.enStatus); $$('[data-en-status]').forEach(b => b.className = 'btn' + (b.dataset.enStatus === status('en:' + k) ? ' sel-' + status('en:' + k) : '')); toast('Đã cập nhật'); } return true; }
   const zh = t.closest('[data-sent-zh]'); if (zh) { openModal({ type: 'sent', i: +zh.dataset.sentZh, tab: 'gram', wc: 0 }); return true; }
-  const ew = t.closest('[data-ew]'); if (ew) { openModal({ type: 'enword', k: ew.dataset.ew }); return true; }
+  const ew = t.closest('[data-ew]'); if (ew) {
+    const rd = ew.closest('.en-reader');
+    if (rd) { showWordCard(rd, ew); return true; }
+    openModal({ type: 'enword', k: ew.dataset.ew }); return true;
+  }
   const row = t.closest('[data-en-sent]'); if (row) { openEnSent(+row.dataset.enSent); return true; }
   return false;
 }

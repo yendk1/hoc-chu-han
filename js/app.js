@@ -649,6 +649,8 @@ function setToggle(key, on) {
   $$(`[data-pill="${key}"]`).forEach(b => { b.classList.toggle('on', on); b.setAttribute('aria-pressed', on); });
 }
 const EN_ON = () => !!(window.EN_DATA && EN_DATA.sents);
+// Dòng tiếng Anh: 🔊 nghe · chạm vào câu để mở bài học tiếng Anh của câu
+const enLine = (i, cls = '') => `<div class="sent-en en-line ${cls}" data-en-open="${i}" title="Chạm để học câu tiếng Anh này"><button class="en-spk" data-en-say="${i}" data-icon title="Nghe tiếng Anh" aria-label="Nghe tiếng Anh">🔊</button><span class="en-txt">${esc(enOf(i))}</span><span class="en-go">Học ›</span></div>`;
 const enOf = i => (EN_ON() && EN_DATA.sents[i]?.en) || '';
 const curSec = () => SECTIONS ? Math.min(SETTINGS['sec_' + BOOK.id] || 0, SECTIONS.length - 1) : -1;
 function setSec(k) {
@@ -678,7 +680,7 @@ renderers.text = () => {
     ${paras.map(([a, b]) => `<div class="tx-para">${LESSON_LIST.slice(a, b + 1).map(l => `
       <div class="sent" data-sent="${l.i}" role="button" tabindex="0" aria-label="Câu ${l.i + 1}">
         <div class="sent-side"><span class="sent-n">${l.i + 1}</span><button class="sent-spk" data-say-text="${l.i}" data-icon title="Nghe câu này" aria-label="Nghe câu ${l.i + 1}">🔊</button></div>
-        <div class="sent-body"><div class="reader">${renderReader(l.text)}</div><div class="sent-vi">${esc(l.viOff)}</div>${enOf(l.i) ? `<div class="sent-en">${esc(enOf(l.i))}</div>` : ''}</div>
+        <div class="sent-body"><div class="reader">${renderReader(l.text)}</div><div class="sent-vi">${esc(l.viOff)}</div>${enOf(l.i) ? enLine(l.i) : ''}</div>
       </div>`).join('')}</div>`).join('')}
     ${S ? `<div class="lesson-nav">
       <button class="btn" data-sec="${sec - 1}" ${sec === 0 ? 'disabled' : ''}>‹ Mục trước</button>
@@ -741,7 +743,7 @@ function renderSentView(v) {
   $('#modalBody').innerHTML = `
     <div class="sv-top">
       <div class="reader sv-reader">${renderReader(l.text)}</div>
-      <div class="sv-vi">${esc(l.viOff)}</div>${enOf(i) ? `<div class="sv-en sent-en">${esc(enOf(i))}</div>` : ''}
+      <div class="sv-vi">${esc(l.viOff)}</div>${enOf(i) ? enLine(i, 'sv-en') : ''}
       <div class="sv-actions">
         <button class="btn" data-say-text="${i}">🔊 Nghe</button>
         <button class="btn" data-say-text="${i}" data-slow>🐢 Chậm</button>
@@ -1220,6 +1222,7 @@ document.addEventListener('click', e => {
   const svt = t.closest('[data-sv-tab]'); if (svt) { const v = modalStack.at(-1); v.tab = svt.dataset.svTab; $$('[data-sv-tab]').forEach(b => b.classList.toggle('on', b === svt)); activeWriter = null; drawSentPane(v); return; }
   const svn = t.closest('[data-sv-nav]'); if (svn && !svn.disabled) { e.preventDefault(); const v = modalStack.at(-1); modalStack[modalStack.length - 1] = { type: 'sent', i: +svn.dataset.svNav, tab: v?.type === 'sent' ? v.tab : 'gram', wc: 0 }; openModal(modalStack.at(-1), false); return; }
   const svw = t.closest('[data-sv-wc]'); if (svw && !svw.disabled) { const v = modalStack.at(-1); v.wc = +svw.dataset.svWc; drawSentPane(v); return; }
+  if (t.closest('[data-en-say], [data-en-open]') && typeof enClick === 'function' && enClick(e, t)) return;
   const sent = t.closest('[data-sent]'); if (sent && !t.closest('#modal')) return openSent(+sent.dataset.sent);
   const bk = t.closest('[data-book]'); if (bk) return switchBook(bk.dataset.book);
   if (t.closest('[data-books]')) { modalStack.length = 0; return openModal({ type: 'books' }); }

@@ -21,7 +21,7 @@
   if (!id || !BOOKS[id]) id = 'lunyu';
   try { localStorage.setItem('hht_book', id); } catch (e) {}
   window.BOOKS = BOOKS; window.BOOK = BOOKS[id];
-  var files = ['js/vendor/hanzi-writer.min.js', 'js/data-chars.js', 'js/data-chars2.js', 'js/data-components.js', 'js/data-audio.js']
+  var files = ['js/vendor/hanzi-writer.min.js', 'js/data-chars.js', 'js/data-chars2.js', 'js/data-components.js', 'js/data-audio.js', 'js/data-en-gloss.js']
     .concat(BOOKS[id].files, ['js/app.js', 'js/english.js']);
   for (var i = 0; i < files.length; i++) document.write('<script src="' + files[i] + '"><\/script>');
 })();
