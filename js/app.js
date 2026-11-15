@@ -1164,7 +1164,7 @@ async function analyzeCustom(text) {
 /* ================= Global events ================= */
 document.addEventListener('click', e => {
   const t = e.target;
-  if (t.closest('[data-close]')) return closeModal();
+  if (t.closest('[data-close]')) return uiBack(modalStack.length || 1);
   const say = t.closest('[data-say]'); if (say) { speak(say.dataset.say); return; }
   const sayText = t.closest('[data-say-text]'); if (sayText) { spToggle(sayText); return; }
   const ftb = t.closest('[data-ft]'); if (ftb) return ftToggle(ftb.dataset.ft);
@@ -1186,13 +1186,13 @@ document.addEventListener('click', e => {
 });
 // Double-click a word in the reader opens the word
 document.addEventListener('dblclick', e => { const w = e.target.closest('.wd'); if (w && !w.closest('.sent')) { e.preventDefault(); openWord(w.dataset.w); } });
-$('#navBack').onclick = () => goBack();
-$('#modalBack').onclick = () => { if (modalStack.length > 1) { modalStack.pop(); openModal(modalStack.at(-1), false); } };
+$('#navBack').onclick = () => uiBack(1);
+$('#modalBack').onclick = () => { if (modalStack.length > 1) uiBack(1); };
 document.addEventListener('keydown', e => {
   if (e.target.matches('input, textarea, select')) return;
   if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('[data-sent]') && $('#modal').hidden) { e.preventDefault(); return openSent(+e.target.dataset.sent); }
   if (!$('#modal').hidden) {
-    if (e.key === 'Escape') closeModal();
+    if (e.key === 'Escape') uiBack(modalStack.length || 1);
     const cur = modalStack.at(-1);
     if (cur?.type === 'sent' && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
       const j = cur.i + (e.key === 'ArrowLeft' ? -1 : 1);
@@ -1277,22 +1277,39 @@ function goBack() {
   if (currentTab !== 'text') { showTab('text', { back: true }); return true; }
   return false;
 }
-let lastBackAt = 0, exiting = false;
-const pushGuard = () => { if (history.state?.hh !== 'app') history.pushState({ hh: 'app' }, ''); };
+/* Chrome Android BỎ QUA các bước lịch sử được thêm khi người dùng chưa chạm vào trang
+ * (chống "bẫy nút Back"). Vì vậy: chỉ thêm bước lịch sử ngay sau một lần chạm/bấm phím,
+ * mỗi bước lịch sử = một bước lùi trong app (+1 bước đệm để hỏi "Bấm Back lần nữa để thoát"). */
+const appSteps = () => ($('#modal').hidden ? 0 : (modalStack.length || 1))
+  + (currentTab === 'review' && RV?.active ? 1 : 0)
+  + (tabHist.length || (currentTab !== 'text' ? 1 : 0));
+const histDepth = () => history.state?.d || 0;
+let ignorePop = false, syncT = 0;
+// Lùi bằng nút trong app (‹ Quay lại, ✕, Esc): làm luôn rồi bỏ bớt bước lịch sử thừa
+function uiBack(n = 1) {
+  for (let j = 0; j < n; j++) if (!goBack()) break;
+  const extra = histDepth() - (appSteps() + 1);
+  if (extra > 0) { ignorePop = true; history.go(-extra); }
+}
 if (window.history && history.pushState) {
   if ('scrollRestoration' in history) history.scrollRestoration = 'manual';   // app tự giữ vị trí cuộn
-  if (history.state?.hh !== 'app') { history.replaceState({ hh: 'root' }, ''); history.pushState({ hh: 'app' }, ''); }
+  history.replaceState({ hh: 'root', d: 0 }, '');
+  const syncHist = () => {
+    clearTimeout(syncT);
+    syncT = setTimeout(() => {   // chạy sau khi app xử lý cú chạm, vẫn trong thời gian "người dùng vừa thao tác"
+      let d = histDepth();
+      while (d < appSteps() + 1 && d < 60) history.pushState({ hh: 'app', d: ++d }, '');
+    }, 0);
+  };
+  ['click', 'pointerup', 'touchend', 'keydown'].forEach(ev => window.addEventListener(ev, syncHist, true));
   window.addEventListener('popstate', () => {
-    if (exiting) return;
-    if (goBack()) { pushGuard(); return; }
-    const now = Date.now();
-    if (now - lastBackAt < 2000) {
-      exiting = true; history.back();
-      // nếu không thoát được (vd: tab trình duyệt không có trang trước) thì khôi phục lại
-      setTimeout(() => { exiting = false; pushGuard(); }, 700);
-      return;
-    }
-    lastBackAt = now; toast('Bấm Back lần nữa để thoát'); pushGuard();
+    if (ignorePop) { ignorePop = false; return; }
+    const d = histDepth();
+    let moved = false, guard = 0;
+    while (appSteps() > 0 && (!moved || appSteps() + 1 > d) && guard++ < 50) { if (!goBack()) break; moved = true; }
+    if (moved) return;
+    toast('Bấm Back lần nữa để thoát');
+    if (d > 0) { ignorePop = true; history.go(-d); }   // về bước gốc: lần Back tiếp theo sẽ thoát app
   });
 }
 
