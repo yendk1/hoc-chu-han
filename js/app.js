@@ -511,18 +511,33 @@ function renderCompView(k) {
 /* ================= Tabs ================= */
 const renderers = {};
 let currentTab = 'text';
-const tabHist = [], tabScroll = {};
+// Lịch sử điều hướng trong app: mỗi bước = { tab, lesson, y } để nút Back / "‹ Quay lại" lùi lại đúng chỗ
+const tabHist = [];
+const pushHist = () => { tabHist.push({ tab: currentTab, lesson: SETTINGS.lesson, y: window.scrollY }); if (tabHist.length > 40) tabHist.shift(); };
 function showTab(tab, opts = {}) {
   if (FT.mode && tab !== 'text') stopSpeech();
-  if (tab !== currentTab) {
-    tabScroll[currentTab] = window.scrollY;
-    if (!opts.back) { tabHist.push(currentTab); if (tabHist.length > 30) tabHist.shift(); }
-  }
+  if (tab !== currentTab && !opts.back) pushHist();
   currentTab = tab;
   $$('#tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   $$('.tab').forEach(s => s.classList.toggle('active', s.id === 'tab-' + tab));
   renderers[tab]?.();
-  window.scrollTo({ top: opts.back ? (tabScroll[tab] || 0) : 0 });
+  window.scrollTo({ top: opts.back ? (opts.y || 0) : 0 });
+  updateNavBack();
+}
+// Chuyển bài trong tab Bài học (cũng ghi vào lịch sử để Back quay về bài trước)
+function switchLesson(i) {
+  if (currentTab === 'lessons' && i !== SETTINGS.lesson) pushHist();
+  SETTINGS.lesson = i; saveSettings();
+  if (currentTab !== 'lessons') return showTab('lessons');
+  renderers.lessons(); window.scrollTo({ top: 0, behavior: 'smooth' }); updateNavBack();
+}
+const canGoBack = () => (currentTab === 'review' && RV?.active) || tabHist.length > 0 || currentTab !== 'text';
+function updateNavBack() {
+  const b = $('#navBack'); if (!b) return;
+  b.hidden = !canGoBack();
+  const prev = tabHist.at(-1);
+  const name = prev ? ($(`#tabs [data-tab="${prev.tab}"]`)?.textContent.replace(/^\S+\s/, '') || '') : 'Toàn văn';
+  b.title = `Quay lại${name ? ': ' + name : ''} (Back)`;
 }
 
 /* ---------- Lessons ---------- */
@@ -572,7 +587,7 @@ renderers.lessons = () => {
     store.set('done', DONE); renderers.lessons();
   };
 };
-function gotoLesson(i) { SETTINGS.lesson = i; saveSettings(); closeModal(); showTab('lessons'); }
+function gotoLesson(i) { closeModal(); switchLesson(i); }
 
 /* ---------- Full text ---------- */
 const pill = (key, label) => `<button class="pill ${SETTINGS[key] ? 'on' : ''}" data-pill="${key}" aria-pressed="${!!SETTINGS[key]}">${label}</button>`;
@@ -906,6 +921,7 @@ function startReview(mode, scope, n) {
     items = shuffle(pool).slice(0, n).map(w => w.w);
   } else items = buildQueue(scope, n);
   if (!items.length) { toast('Không có thẻ nào trong phạm vi này 🎉 Hãy chọn phạm vi khác.'); return; }
+  if (currentTab === 'review') pushHist();          // Back khi đang ôn -> quay về màn chọn chế độ
   RV = { active: true, mode, items, pos: 0, results: [], flipped: false };
   showTab('review');
 }
@@ -1131,7 +1147,7 @@ document.addEventListener('click', e => {
   const sent = t.closest('[data-sent]'); if (sent && !t.closest('#modal')) return openSent(+sent.dataset.sent);
   const tab = t.closest('#tabs [data-tab]'); if (tab) { if (tab.dataset.tab === 'review' && RV) RV.active = RV.active && currentTab === 'review'; return showTab(tab.dataset.tab); }
   const gl = t.closest('[data-goto-lesson]'); if (gl) return gotoLesson(+gl.dataset.gotoLesson);
-  const ls = t.closest('[data-lesson]'); if (ls && !ls.disabled) { SETTINGS.lesson = +ls.dataset.lesson; saveSettings(); if (currentTab !== 'lessons') return showTab('lessons'); renderers.lessons(); window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
+  const ls = t.closest('[data-lesson]'); if (ls && !ls.disabled) return switchLesson(+ls.dataset.lesson);
   const rl = t.closest('[data-review-lesson]'); if (rl) { const s = 'lesson:' + rl.dataset.reviewLesson; SETTINGS.scope = s; saveSettings(); return startReview(SETTINGS.mode, s, 50); }
   const wl = t.closest('[data-write-lesson]'); if (wl) { WR.lesson = +wl.dataset.writeLesson; WR.c = null; return showTab('write'); }
   const st = t.closest('[data-status]'); if (st) { const c = modalStack.at(-1)?.c; if (c) { setStatus(c, st.dataset.status); $$('[data-status]').forEach(b => b.className = 'btn' + (b.dataset.status === status(c) ? ' sel-' + status(c) : '')); toast('Đã cập nhật'); } return; }
@@ -1142,6 +1158,7 @@ document.addEventListener('click', e => {
 });
 // Double-click a word in the reader opens the word
 document.addEventListener('dblclick', e => { const w = e.target.closest('.wd'); if (w && !w.closest('.sent')) { e.preventDefault(); openWord(w.dataset.w); } });
+$('#navBack').onclick = () => goBack();
 $('#modalBack').onclick = () => { if (modalStack.length > 1) { modalStack.pop(); openModal(modalStack.at(-1), false); } };
 document.addEventListener('keydown', e => {
   if (e.target.matches('input, textarea, select')) return;
@@ -1219,7 +1236,16 @@ function goBack() {
     if (modalStack.length > 1) { modalStack.pop(); openModal(modalStack.at(-1), false); } else closeModal();
     return true;
   }
-  while (tabHist.length) { const t = tabHist.pop(); if (t !== currentTab) { showTab(t, { back: true }); return true; } }
+  if (currentTab === 'review' && RV?.active) {
+    RV.active = false;                               // thoát phiên ôn tập
+    if (!tabHist.length || tabHist.at(-1).tab === 'review') { if (tabHist.at(-1)?.tab === 'review') tabHist.pop(); renderers.review(); window.scrollTo({ top: 0 }); updateNavBack(); return true; }
+  }
+  if (tabHist.length) {
+    const e = tabHist.pop();
+    if (e.tab === 'lessons') SETTINGS.lesson = e.lesson;
+    if (e.tab === currentTab && e.tab !== 'lessons') { updateNavBack(); return goBack(); }
+    showTab(e.tab, { back: true, y: e.y }); return true;
+  }
   if (currentTab !== 'text') { showTab('text', { back: true }); return true; }
   return false;
 }

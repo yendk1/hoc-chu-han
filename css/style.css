@@ -446,3 +446,13 @@ body.hide-vi .sent-vi { display: none; }
 .sent.playing { background: var(--accent-soft); box-shadow: inset 4px 0 0 var(--accent); }
 .sent.playing .sent-n { background: var(--accent); color: #fff; }
 @media (max-width: 700px) { .tx-tools .btn-row { width: 100%; } .ft-btn { flex: 1; min-width: 0; } }
+
+/* nút Quay lại trên thanh trên cùng */
+.nav-back { border: 1px solid var(--line); background: var(--paper); border-radius: 999px; height: 36px; padding: 0 14px 0 10px; font-size: 20px; line-height: 1; display: inline-flex; align-items: center; gap: 2px; color: var(--accent); font-weight: 600; }
+.nav-back .lbl { font-size: 14px; }
+.nav-back:hover { background: var(--gold-soft); border-color: var(--gold); }
+.nav-back[hidden] { display: none; }
+@media (max-width: 900px) {
+  .nav-back { height: 32px; padding: 0 10px; }
+  .nav-back .lbl { display: none; }
+}
