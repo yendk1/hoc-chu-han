@@ -1394,18 +1394,34 @@ if (window.history && history.pushState) {
 /* ================= PWA: offline + cài đặt + cập nhật ================= */
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   navigator.serviceWorker.register('sw.js').then(reg => {
-    const onUpdate = w => {
-      w.addEventListener('statechange', () => {
-        if (w.state === 'installed' && navigator.serviceWorker.controller) {
-          const t = $('#toast');
-          t.innerHTML = 'Đã có phiên bản mới. <button class="link" style="color:inherit;text-decoration:underline">Cập nhật ngay</button>';
-          t.style.pointerEvents = 'auto'; t.classList.add('show');
-          t.querySelector('button').onclick = () => w.postMessage('skipWaiting');
-        }
-      });
+    // Thanh báo cập nhật riêng (không bị các thông báo khác che/ghi đè), ở lại đến khi bấm.
+    const showUpdate = w => {
+      if (!navigator.serviceWorker.controller) return;
+      let bar = $('#updBar');
+      if (!bar) {
+        bar = document.createElement('div'); bar.id = 'updBar'; bar.className = 'upd-bar';
+        bar.innerHTML = '<span>🎉 Đã có phiên bản mới</span><button class="btn primary">Cập nhật ngay</button>';
+        document.body.appendChild(bar);
+      }
+      bar.querySelector('button').onclick = () => {
+        bar.querySelector('button').textContent = 'Đang cập nhật…';
+        const nw = reg.waiting || w;
+        nw.addEventListener('statechange', () => { if (nw.state === 'activated') location.reload(); });
+        nw.postMessage('skipWaiting');
+        setTimeout(() => location.reload(), 3000);   // dự phòng nếu không nhận được controllerchange
+      };
     };
-    if (reg.waiting && navigator.serviceWorker.controller) onUpdate(reg.waiting);
+    const onUpdate = w => {
+      if (w.state === 'installed') return showUpdate(w);
+      w.addEventListener('statechange', () => { if (w.state === 'installed') showUpdate(w); });
+    };
+    if (reg.waiting) onUpdate(reg.waiting);
+    if (reg.installing) onUpdate(reg.installing);
     reg.addEventListener('updatefound', () => onUpdate(reg.installing));
+    // App trên điện thoại thường chỉ được mở lại từ nền: kiểm tra bản mới mỗi lần quay lại app và mỗi 30 phút.
+    const check = () => reg.update().catch(() => { });
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') check(); });
+    setInterval(check, 30 * 60 * 1000);
   }).catch(() => { });
   // Chỉ tải lại khi thay bản cũ bằng bản mới (không tải lại ở lần cài đầu tiên)
   const hadController = !!navigator.serviceWorker.controller;

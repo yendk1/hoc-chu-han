@@ -637,3 +637,6 @@ body.show-zh .en-zh { display: block; }
 .modal-title { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .modal-bar .icon-btn { flex: 0 0 auto; position: relative; z-index: 1; }
 .ev-filter { flex-wrap: wrap; } .ev-filter select, .toolbar select { max-width: 100%; min-width: 0; text-overflow: ellipsis; }
+/* Thanh báo phiên bản mới */
+.upd-bar { position: fixed; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 9999; display: flex; align-items: center; gap: 12px; padding: 10px 12px 10px 16px; background: #2b2420; color: #fff; border-radius: 14px; box-shadow: 0 6px 24px rgba(0,0,0,.25); font-size: 14px; max-width: calc(100vw - 32px); }
+.upd-bar .btn { white-space: nowrap; }
