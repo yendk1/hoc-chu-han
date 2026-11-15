@@ -114,7 +114,30 @@ function stopSpeech() {
   playToken++; playQueue = [];
   try { player.pause(); } catch (e) {}
   if (typeof ftReset === 'function') ftReset();
+  spReset();
   if ('speechSynthesis' in window) speechSynthesis.cancel();
+}
+/* Nút nghe 1 câu (Bài học, popup câu): bấm = đọc, bấm lần nữa = tạm dừng, bấm tiếp = nghe tiếp */
+const SP = { key: null, paused: false, token: -1 };
+const spKey = b => b.dataset.sayText + (b.hasAttribute('data-slow') ? 's' : '');
+function spUI() {
+  document.querySelectorAll('[data-say-text]').forEach(b => {
+    if (!b.dataset.label) b.dataset.label = b.textContent;
+    const on = SP.key === spKey(b);
+    b.textContent = !on ? b.dataset.label : SP.paused ? '▶ Nghe tiếp' : '⏸ Tạm dừng';
+    b.classList.toggle('on', on);
+  });
+}
+function spReset() { if (SP.key === null) return; SP.key = null; SP.paused = false; SP.token = -1; spUI(); }
+function spToggle(b) {
+  const k = spKey(b);
+  if (SP.key === k) {
+    SP.paused = !SP.paused;
+    if (SP.paused) player.pause(); else player.play()?.catch?.(() => {});
+    spUI(); return;
+  }
+  speak(LESSONS[+b.dataset.sayText][0], b.hasAttribute('data-slow') ? 0.5 : 0.8);   // dừng mọi âm thanh khác
+  if (playQueue.length || !player.paused || player.src) { SP.key = k; SP.paused = false; SP.token = playToken; spUI(); }
 }
 // Âm thanh im lặng rất ngắn: phát ngay trong lúc chạm để iOS "mở khóa" trình phát.
 const SILENT = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
@@ -127,15 +150,18 @@ function audioSrc(url) {
 }
 function playFiles(urls, onFail) {
   const token = ++playToken; playQueue = urls.slice();
-  const fail = () => { if (token === playToken) { playQueue = []; onFail?.(); } };
+  const fail = () => { if (token === playToken) { playQueue = []; if (SP.token === token) spReset(); onFail?.(); } };
   try { player.src = SILENT; player.play()?.catch?.(() => {}); } catch (e) {}
   const next = () => {
-    if (token !== playToken || !playQueue.length) return;
+    if (token !== playToken) return;
+    if (!playQueue.length) { if (SP.token === token) spReset(); return; }   // đọc xong
+
     const u = playQueue.shift();
     if (playQueue[0]) audioSrc(playQueue[0]).catch(() => {});      // tải trước đoạn kế tiếp
     audioSrc(u).then(src => {
       if (token !== playToken) return;
       player.src = src; player.onended = next; player.onerror = fail;
+      if (SP.token === token && SP.paused) return;                   // đã bấm tạm dừng trong lúc tải
       const pr = player.play(); if (pr && pr.catch) pr.catch(err => { if (err.name !== 'AbortError') fail(); });
     }, fail);
   };
@@ -339,6 +365,7 @@ function openModal(view, push = true) {
   else if (view.type === 'help') renderVoiceHelp();
   else if (view.type === 'sent') renderSentView(view);
   $('.modal-panel').scrollTop = 0;
+  spUI();
 }
 function closeModal() { $('#modal').hidden = true; modalStack.length = 0; activeWriter = null; if (!FT.mode) stopSpeech(); }
 const openChar = c => openModal({ type: 'char', c });
@@ -521,6 +548,7 @@ function showTab(tab, opts = {}) {
   $$('#tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   $$('.tab').forEach(s => s.classList.toggle('active', s.id === 'tab-' + tab));
   renderers[tab]?.();
+  spUI();
   window.scrollTo({ top: opts.back ? (opts.y || 0) : 0 });
   updateNavBack();
 }
@@ -529,7 +557,7 @@ function switchLesson(i) {
   if (currentTab === 'lessons' && i !== SETTINGS.lesson) pushHist();
   SETTINGS.lesson = i; saveSettings();
   if (currentTab !== 'lessons') return showTab('lessons');
-  renderers.lessons(); window.scrollTo({ top: 0, behavior: 'smooth' }); updateNavBack();
+  renderers.lessons(); spUI(); window.scrollTo({ top: 0, behavior: 'smooth' }); updateNavBack();
 }
 const canGoBack = () => (currentTab === 'review' && RV?.active) || tabHist.length > 0 || currentTab !== 'text';
 function updateNavBack() {
@@ -584,7 +612,7 @@ renderers.lessons = () => {
   $('#viBox').onclick = () => { SETTINGS.vi = !SETTINGS.vi; saveSettings(); $('#viBox').classList.toggle('blur', !SETTINGS.vi); };
   $('#btnDone').onclick = () => {
     if (DONE[i]) delete DONE[i]; else { DONE[i] = Date.now(); newChars.forEach(c => { if (!SRS[c]) setStatus(c, 'learning'); }); toast(`Đã thêm ${newChars.length} chữ mới vào danh sách ôn tập`); }
-    store.set('done', DONE); renderers.lessons();
+    store.set('done', DONE); renderers.lessons(); spUI();
   };
 };
 function gotoLesson(i) { closeModal(); switchLesson(i); }
@@ -1138,7 +1166,7 @@ document.addEventListener('click', e => {
   const t = e.target;
   if (t.closest('[data-close]')) return closeModal();
   const say = t.closest('[data-say]'); if (say) { speak(say.dataset.say); return; }
-  const sayText = t.closest('[data-say-text]'); if (sayText) { speak(LESSONS[+sayText.dataset.sayText][0], sayText.hasAttribute('data-slow') ? 0.5 : 0.8); return; }
+  const sayText = t.closest('[data-say-text]'); if (sayText) { spToggle(sayText); return; }
   const ftb = t.closest('[data-ft]'); if (ftb) return ftToggle(ftb.dataset.ft);
   const pl = t.closest('[data-pill]'); if (pl) return setToggle(pl.dataset.pill, !SETTINGS[pl.dataset.pill]);
   const svt = t.closest('[data-sv-tab]'); if (svt) { const v = modalStack.at(-1); v.tab = svt.dataset.svTab; $$('[data-sv-tab]').forEach(b => b.classList.toggle('on', b === svt)); activeWriter = null; drawSentPane(v); return; }
