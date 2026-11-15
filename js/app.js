@@ -124,7 +124,8 @@ function spUI() {
   document.querySelectorAll('[data-say-text]').forEach(b => {
     if (!b.dataset.label) b.dataset.label = b.textContent;
     const on = SP.key === spKey(b);
-    b.textContent = !on ? b.dataset.label : SP.paused ? '▶ Nghe tiếp' : '⏸ Tạm dừng';
+    b.textContent = !on ? b.dataset.label : b.hasAttribute('data-icon') ? (SP.paused ? '▶' : '⏸') : SP.paused ? '▶ Nghe tiếp' : '⏸ Tạm dừng';
+    if (b.hasAttribute('data-icon')) b.title = !on ? 'Nghe câu này' : SP.paused ? 'Nghe tiếp' : 'Tạm dừng';
     b.classList.toggle('on', on);
   });
 }
@@ -629,7 +630,7 @@ renderers.text = () => {
   $('#tab-text').innerHTML = `
     <div class="tx-head">
       <div><h2><span class="hz">論語</span> <small>Luận ngữ</small></h2>
-        <p class="tx-hint">👆 Chạm vào một câu để xem ngữ pháp, cách ghép chữ và tập viết.</p></div>
+        <p class="tx-hint">👆 Chạm vào một câu để xem ngữ pháp, cách ghép chữ và tập viết · 🔊 nghe riêng từng câu.</p></div>
       <div class="tx-tools">
         <div class="pills">${pill('py', 'Pinyin')}${pill('hv', 'Hán Việt')}${pill('viOn', 'Tiếng Việt')}</div>
         <div class="btn-row">
@@ -640,7 +641,7 @@ renderers.text = () => {
     </div>
     ${PARAS.map(([a, b]) => `<div class="tx-para">${LESSON_LIST.slice(a, b + 1).map(l => `
       <div class="sent" data-sent="${l.i}" role="button" tabindex="0" aria-label="Câu ${l.i + 1}">
-        <span class="sent-n">${l.i + 1}</span>
+        <div class="sent-side"><span class="sent-n">${l.i + 1}</span><button class="sent-spk" data-say-text="${l.i}" data-icon title="Nghe câu này" aria-label="Nghe câu ${l.i + 1}">🔊</button></div>
         <div class="sent-body"><div class="reader">${renderReader(l.text)}</div><div class="sent-vi">${esc(l.viOff)}</div></div>
       </div>`).join('')}</div>`).join('')}
     <p class="tx-src">Bản dịch tiếng Việt: <a href="${esc(window.VI_SOURCE || '#')}" target="_blank" rel="noopener">vi.falundafa.org</a></p>`;

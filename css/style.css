@@ -456,3 +456,11 @@ body.hide-vi .sent-vi { display: none; }
   .nav-back { height: 32px; padding: 0 10px; }
   .nav-back .lbl { display: none; }
 }
+
+/* Loa nhỏ đầu mỗi câu (Toàn văn) */
+.sent-side { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.sent-side .sent-n { margin-top: 2px; }
+.sent-spk { width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--line); background: var(--paper); font-size: 14px; line-height: 1; padding: 0; cursor: pointer; display: grid; place-items: center; transition: background .15s, border-color .15s; }
+.sent-spk:hover { border-color: var(--accent); background: var(--accent-soft); }
+.sent-spk.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.sent:has(.sent-spk.on) { background: var(--accent-soft); box-shadow: inset 4px 0 0 var(--accent); }
