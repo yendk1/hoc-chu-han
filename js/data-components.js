@@ -233,4 +233,272 @@ window.COMP_RAW = `
 尔|Nhĩ|ngươi (gợi âm)||
 固|Cố|bền chắc (gợi âm)||
 勺|Chước|cái muôi (gợi âm)||
+// --- bổ sung cho Bài giảng thứ nhất ---
+⺈|Đao (biến thể)|con dao (bộ Đao viết trên đầu chữ)|18|刀
+⺌|Tiểu (biến thể)|nhỏ (bộ Tiểu viết trên đầu chữ)|42|小
+⺮|Trúc đầu|cây tre (bộ Trúc viết trên đầu chữ)|118|竹
+⺼|Nhục nguyệt|thịt (bộ Nhục viết như chữ Nguyệt)|130|肉
+㐬|Lưu|nước chảy (phần của 流, 疏)||
+㒼|Man|bằng nhau, che phủ (phần của 滿)||
+㔾|Tiết (biến thể)|đốt tre, ấn tín (bộ Tiết)|26|卩
+㠯|Dĩ|dùng, lấy (dạng cổ của 以)||
+㡭|Kế|nối tiếp (dạng cổ của 繼)||
+㢟|Triền|đi chậm, thong thả (phần của 延)||
+㥯|Ẩn|cẩn thận, thận trọng (phần của 隱)||
+㬎|Hiển|sáng rõ (dạng cổ của 顯)||
+䜌|Loan|rối loạn, liền nhau (phần của 變, 戀)||
+丂|Khảo|hơi thở bị nghẽn||
+丄|Thượng|trên (dạng cổ của 上)||
+丑|Sửu|chi Sửu (chi thứ hai)||
+丙|Bính|can Bính (can thứ ba)||
+业|Nghiệp|nghề nghiệp (dạng giản thể của 業)||
+丩|Cưu|dây leo quấn vào nhau||
+丰|Phong|tươi tốt, đầy đặn||
+丱|Quán|tóc trẻ con búi hai chỏm||
+丷|Bát (biến thể)|hai chấm tách ra (bộ Bát trên đầu chữ)|12|八
+丸|Hoàn|viên tròn, viên thuốc||
+乂|Nghệ|cắt cỏ, cai trị||
+乃|Nãi|bèn, ấy là||
+乇|Thác|lá cỏ, nương nhờ||
+乏|Phạp|thiếu thốn||
+乚|Ất (biến thể)|nét móc (bộ Ất)|5|乙
+乞|Khất|xin, ăn xin||
+予|Dư|ta; cho, trao||
+亏|Khuy|thiếu, hao hụt (giản thể của 虧)||
+云|Vân|nói; mây||
+亚|Á|thứ hai; châu Á (giản thể của 亞)||
+亠|Đầu|nắp, phần đầu|8|
+亡|Vong|mất, chết||
+亢|Kháng|cao, cổ họng||
+亥|Hợi|chi Hợi (chi thứ mười hai)||
+亭|Đình|cái đình, chòi nghỉ||
+亲|Thân|thân thích (giản thể của 親)||
+仌|Băng|băng giá (dạng cổ của bộ Băng)|15|冫
+余|Dư|ta, tôi; thừa||
+侖|Luân|thứ tự, lớp lang||
+侯|Hầu|tước hầu||
+俞|Du|vâng, đồng ý||
+僉|Thiêm|đều, cùng nhau||
+兀|Ngột|cao chót vót, trụi||
+充|Sung|đầy, lấp đầy||
+兆|Triệu|điềm báo; số triệu||
+免|Miễn|tránh, miễn cho||
+兟|Sân|tiến lên||
+关|Quan|cửa ải; đóng (giản thể của 關)||
+兹|Tư|này, nay||
+冎|Quả|lóc thịt khỏi xương||
+冒|Mạo|che trùm; liều, mạo hiểm||
+冓|Cấu|gỗ đan chéo, chỗ kín||
+冗|Nhũng|thừa, rườm rà||
+冬|Đông|mùa đông||
+凡|Phàm|tầm thường; hết thảy||
+処|Xứ|nơi, chỗ (dạng khác của 處)||
+刑|Hình|hình phạt||
+匸|Hễ|che đậy, cất giấu|23|
+匹|Thất|xấp vải; con (ngựa)||
+卄|Trấp|hai mươi||
+卜|Bốc|bói|25|
+占|Chiêm|xem bói; chiếm||
+卯|Mão|chi Mão (chi thứ tư)||
+厃|Nguy|đứng trên cao (phần của 危)||
+厤|Lịch|tính lịch (phần của 歷, 曆)||
+叀|Chuyên|con quay xe chỉ (phần của 專, 惠)||
+參|Tham|tham dự; sâm||
+叚|Giả|mượn, giả (phần của 假)||
+召|Triệu|vời, gọi đến||
+右|Hữu|bên phải||
+司|Ti|coi giữ, quản lý||
+吉|Cát|tốt lành||
+君|Quân|vua, người quân tử||
+吴|Ngô|nước Ngô; họ Ngô||
+吾|Ngô|ta, tôi||
+呈|Trình|trình bày, dâng lên||
+咸|Hàm|đều, tất cả||
+啚|Bỉ|keo kiệt, quê mùa (phần của 圖, 鄙)||
+喿|Táo|chim kêu ríu rít||
+囟|Tín|thóp đầu||
+圣|Thánh|thánh (giản thể của 聖)||
+圭|Khuê|ngọc khuê||
+坴|Lục|gò đất (phần của 陸)||
+垂|Thùy|rủ xuống||
+垔|Nhân|lấp, ngăn dòng (phần của 煙)||
+埶|Nghệ|trồng trọt (dạng cổ của 藝)||
+堇|Cận|đất sét vàng||
+堯|Nghiêu|vua Nghiêu; cao||
+壬|Nhâm|can Nhâm (can thứ chín)||
+壯|Tráng|mạnh mẽ, khỏe||
+壴|Trú|cái trống (dạng cổ)||
+夅|Giáng|đi xuống (phần của 降)||
+夆|Phong|chống lại, gặp (phần của 峰, 逢)||
+复|Phục|trở lại (giản thể của 復)||
+夫|Phu|đàn ông, chồng||
+夬|Quái|quyết đoán; quẻ Quải||
+夭|Yểu|chết non; tươi tốt||
+奉|Phụng|dâng, vâng theo||
+奏|Tấu|tâu lên; tấu nhạc||
+奐|Hoán|rực rỡ, nhiều||
+孚|Phu|ấp trứng; tin||
+孝|Hiếu|hiếu thảo||
+宓|Mật|yên lặng||
+宿|Túc|ngủ trọ, nghỉ đêm||
+寅|Dần|chi Dần (chi thứ ba)||
+寧|Ninh|yên ổn||
+尃|Phu|bày ra, ban bố (phần của 博, 傅)||
+尌|Thụ|dựng đứng (phần của 樹)||
+岡|Cương|sườn núi||
+巛|Xuyên|sông ngòi|47|
+川|Xuyên|sông|47|巛
+州|Châu|châu (đơn vị hành chính)||
+巠|Kinh|mạch nước ngầm (phần của 經)||
+巩|Củng|vững chắc (giản thể của 鞏)||
+巫|Vu|thầy cúng, phù thủy||
+巴|Ba|mong mỏi; bám vào||
+巽|Tốn|quẻ Tốn; nhún thuận||
+帀|Táp|đi vòng quanh||
+帚|Trửu|cái chổi||
+帛|Bạch|lụa||
+帝|Đế|vua, thượng đế||
+并|Tịnh|gộp, cùng (giản thể của 並, 併)||
+幺|Yêu|nhỏ bé|52|
+庫|Khố|kho||
+廴|Dẫn|bước dài|54|
+廷|Đình|triều đình||
+廾|Củng|chắp hai tay|55|
+廿|Nhập|hai mươi||
+弗|Phất|chẳng, không||
+彌|Di|đầy khắp; càng||
+彔|Lục|khắc gỗ (phần của 錄, 綠)||
+彖|Thoán|con lợn; lời thoán||
+彥|Ngạn|người tài giỏi||
+憂|Ưu|lo buồn||
+戉|Việt|cái búa lớn||
+戌|Tuất|chi Tuất (chi thứ mười một)||
+戍|Thú|canh giữ biên giới||
+戔|Tiên|nhỏ hẹp, ít ỏi||
+戜|Điệt|sắc, lợi (phần của 鐵)||
+戠|Chí|ghi nhớ, đất sét (phần của 職, 識)||
+户|Hộ|cửa một cánh; nhà|63|戶
+拍|Phách|vỗ, đập||
+敏|Mẫn|nhanh nhẹn, thông minh||
+敕|Sắc|lệnh vua||
+敫|Kiểu|ánh sáng chiếu ra (phần của 激)||
+斬|Trảm|chém||
+斿|Du|dải cờ; đi chơi||
+无|Vô|không, không có|71|
+旡|Ký|nghẹn (biến thể bộ Vô)|71|无
+旨|Chỉ|ý chỉ; ngon||
+昆|Côn|anh; con cháu; đông đúc||
+昜|Dương|mặt trời lên, sáng (phần của 陽, 湯)||
+昭|Chiêu|sáng sủa||
+曷|Hạt|sao, gì, bao giờ||
+曹|Tào|bọn, quan nha||
+曼|Mạn|dài, xa; đẹp||
+朔|Sóc|ngày mồng một; phương bắc||
+朝|Triều|triều đình; buổi sớm||
+未|Vị|chưa; chi Mùi||
+札|Trát|thẻ gỗ để viết; thư||
+术|Thuật|kỹ thuật (giản thể của 術)||
+朱|Chu|màu đỏ son||
+杀|Sát|giết (giản thể của 殺)||
+松|Tùng|cây thông||
+林|Lâm|rừng||
+枼|Diệp|lá, thẻ gỗ (phần của 葉)||
+欲|Dục|muốn||
+歹|Ngạt|xương tàn, xấu|78|
+殸|Khánh|cái khánh đá (phần của 聲, 磬)||
+毄|Kích|đánh, va chạm (phần của 擊)||
+毋|Vô|chớ, đừng|80|
+母|Mẫu|mẹ|80|毋
+气|Khí|hơi, khí|84|
+氺|Thủy (biến thể)|nước (bộ Thủy ở chân chữ)|85|水
+涂|Đồ|bôi, trát; họ Đồ||
+淮|Hoài|sông Hoài||
+灬|Hỏa (biến thể)|lửa (bộ Hỏa ở chân chữ)|86|火
+炎|Viêm|nóng, bốc cháy||
+烕|Diệt|dập tắt (phần của 滅)||
+爯|Xứng|cầm lên, cân (dạng cổ của 稱)||
+爻|Hào|hào quẻ, đan chéo|89|
+爿|Tường|mảnh gỗ bên trái|90|
+犭|Khuyển (biến thể)|con chó (bộ Khuyển đứng)|94|犬
+瓦|Ngõa|ngói, đồ gốm|98|
+甘|Cam|ngọt|99|
+甫|Phủ|mới, bắt đầu; tên chữ đàn ông||
+甬|Dũng|lối đi, ống (phần của 通, 勇)||
+电|Điện|điện (giản thể của 電)||
+番|Phiên|lượt, lần||
+登|Đăng|lên, trèo||
+盍|Hạp|sao chẳng; đậy lại||
+盧|Lư|hũ đựng cơm; màu đen||
+睪|Dịch|dò xét (phần của 譯, 擇)||
+矣|Hĩ|trợ từ chỉ sự đã xong||
+矦|Hầu|tước hầu (dạng cổ của 侯)||
+票|Phiếu|tấm phiếu, vé||
+祭|Tế|cúng tế||
+秀|Tú|lúa trổ bông; tốt đẹp||
+童|Đồng|trẻ con||
+糹|Mịch (biến thể)|sợi tơ (bộ Mịch đứng)|120|糸
+累|Lũy|chồng chất; liên lụy||
+缶|Phẫu|cái vò sành|121|
+网|Võng|cái lưới|122|
+罷|Bãi|thôi, bỏ||
+翰|Hàn|lông cánh; bút||
+耂|Lão (biến thể)|già (bộ Lão trên đầu chữ)|125|老
+耑|Đoan|đầu mối, mầm (phần của 端)||
+耳|Nhĩ|tai|128|
+肖|Tiếu|giống||
+肰|Nhiên|thịt chó (phần của 然)||
+育|Dục|nuôi nấng||
+胃|Vị|dạ dày||
+臤|Khiên|cứng, vững (phần của 賢, 堅)||
+臧|Tang|tốt, lành||
+臱|Miên|không thấy, che khuất (phần của 邊)||
+芻|Sô|cỏ cho súc vật ăn||
+荅|Đáp|đậu nhỏ; đáp lại||
+葬|Táng|chôn cất||
+蒦|Hoạch|đo lường (phần của 獲, 護)||
+虫|Trùng|sâu bọ|142|
+虽|Tuy|tuy, dù (giản thể của 雖)||
+襄|Tương|giúp đỡ; cởi áo||
+詹|Chiêm|nói nhiều; họ Chiêm||
+諸|Chư|các, mọi||
+谷|Cốc|hang, khe núi|150|
+豆|Đậu|hạt đậu; bát đựng đồ cúng|151|
+豦|Cự|lợn rừng đánh nhau (phần của 劇, 據)||
+賈|Giả|buôn bán; họ Giả||
+賏|Anh|chuỗi vỏ sò (phần của 嬰)||
+賣|Mại|bán||
+赤|Xích|màu đỏ|155|
+車|Xa|xe|159|
+軍|Quân|quân đội||
+農|Nông|nghề nông||
+退|Thoái|lui||
+逢|Phùng|gặp||
+遀|Tùy|đi theo (phần của 隨)||
+鄉|Hương|làng, quê||
+酉|Dậu|bình rượu; chi Dậu|164|
+釆|Biện|phân biệt|165|
+采|Thải|hái, nhặt||
+釒|Kim (biến thể)|kim loại (bộ Kim đứng)|167|金
+镸|Trường (biến thể)|dài (bộ Trường bên trái)|168|長
+隡|Tát|phiên âm Phạn (phần của 薩)||
+隶|Đãi|kịp, theo đến|171|
+隺|Hạc|chim bay cao (phần của 鶴, 確)||
+雈|Hoàn|cú mèo có mào (phần của 舊, 觀)||
+雔|Thù|đôi chim (phần của 雙, 讎)||
+靑|Thanh|màu xanh|174|
+韋|Vi|da thuộc|178|
+食|Thực|ăn|184|
+飠|Thực (biến thể)|ăn (bộ Thực đứng)|184|食
+馮|Bằng|dựa vào; ngựa phi; họ Phùng||
+髟|Tiêu|tóc dài|190|
+鬲|Cách|cái đỉnh ba chân rỗng|193|
+鬼|Quỷ|ma quỷ|194|
+魚|Ngư|cá|195|
+黄|Hoàng|màu vàng|201|黃
+黽|Mãnh|con ếch; cố gắng|205|
+齒|Xỉ|răng|211|
+龍|Long|con rồng|212|
+龶|hình đầu chữ Sinh|phần trên của 青, 素 (từ 生)||
+龹|hình đầu chữ Quyển|phần trên của 卷, 拳, 券||
+龺|hình đầu chữ Triều|phần trái của 朝, 乾, 韓||
 `;

@@ -18,12 +18,16 @@ const TYPE_NAMES = {
   HY: ['Hội ý', 'ghép các phần lại thành ý mới'],
   HT: ['Hình thanh', 'một phần chỉ nghĩa + một phần gợi âm'],
 };
+const BOOK = window.BOOK || { id: 'lunyu', zh: '論語', vi: 'Luận ngữ', short: 'Luận ngữ', audio: 'audio/', slowFiles: true };
 const CHARS = {}, CHAR_LIST = [];
-CHAR_RAW.trim().split('\n').forEach((line, i) => {
+(CHAR_RAW + '\n' + (window.CHAR_RAW2 || '')).trim().split('\n').forEach(line => {
+  if (!line.includes('|')) return;
   const [c, py, hv, sc, m, rad, parts, type, ex] = line.split('|');
-  const o = { c, py, hv, sc, m, rad, parts: parts.trim() ? parts.trim().split(/\s+/) : [], type, ex, idx: i };
-  CHARS[c] = o; CHAR_LIST.push(o);
+  if (CHARS[c]) return;
+  CHARS[c] = { c, py, hv, sc, m, rad, parts: (parts || '').trim() ? parts.trim().split(/\s+/) : [], type: TYPE_NAMES[type] ? type : 'HY', ex: ex || '', idx: -1 };
 });
+// Danh sách chữ của cuốn sách đang học, theo thứ tự xuất hiện
+LESSONS.forEach(([t]) => [...t].forEach(c => { const o = CHARS[c]; if (o && o.idx < 0) { o.idx = CHAR_LIST.length; CHAR_LIST.push(o); } }));
 const COMPS = {};
 COMP_RAW.trim().split('\n').forEach(line => {
   const [c, name, mean, no, base] = line.split('|');
@@ -39,7 +43,9 @@ WORD_RAW.trim().split('\n').forEach(line => {
 });
 const VI_OFF = window.VI_OFFICIAL || [];
 const LESSON_LIST = LESSONS.map(([text, vi], i) => ({ i, text, vi, viOff: VI_OFF[i] || vi }));
-const PARAS = [[0, 6], [7, 11], [12, 13], [14, 19]];
+const PARAS = window.BOOK_PARAS || [[0, 6], [7, 11], [12, 13], [14, 19]];
+const SECTIONS = window.BOOK_SECTIONS || null;   // [{zh, vi, en, a, b}] – các mục lớn (Bài giảng)
+const secOf = i => SECTIONS ? Math.max(0, SECTIONS.findIndex(s => i >= s.a && i <= s.b)) : 0;
 
 const CHAR_WORDS = {};
 WORDS.forEach(w => [...new Set(w.w)].forEach(c => (CHAR_WORDS[c] ||= []).push(w)));
@@ -59,9 +65,13 @@ const store = {
   get(k, d) { try { const v = localStorage.getItem('hht_' + k); return v ? JSON.parse(v) : d; } catch { return d; } },
   set(k, v) { try { localStorage.setItem('hht_' + k, JSON.stringify(v)); } catch { } },
 };
-let SRS = store.get('srs', {}), NOTES = store.get('notes', {}), DONE = store.get('done', {}), CUSTOM = store.get('custom', []);
-const SETTINGS = Object.assign({ py: true, hv: true, vi: true, viOn: true, rad: true, lesson: 0, mode: 'flash', scope: 'smart', count: 15 }, store.get('settings', {}));
-const saveSettings = () => store.set('settings', SETTINGS);
+const DONE_KEY = BOOK.id !== 'lunyu' ? 'done_' + BOOK.id : 'done';
+let SRS = store.get('srs', {}), NOTES = store.get('notes', {}), DONE = store.get(DONE_KEY, {}), CUSTOM = store.get('custom', []);
+const SETTINGS = Object.assign({ py: true, hv: true, vi: true, viOn: true, enOn: false, rad: true, lesson: 0, mode: 'flash', scope: 'smart', count: 15 }, store.get('settings', {}));
+SETTINGS.book = BOOK.id;
+if (BOOK.id !== 'lunyu' || SETTINGS.lesson_lunyu != null) SETTINGS.lesson = SETTINGS['lesson_' + BOOK.id] || 0;
+SETTINGS.lesson = Math.min(SETTINGS.lesson || 0, LESSONS.length - 1);
+const saveSettings = () => { SETTINGS['lesson_' + BOOK.id] = SETTINGS.lesson; store.set('settings', SETTINGS); };
 
 const DAY = 864e5, INTERVALS = [0, 1, 3, 7, 14, 30, 60];
 function status(c) { const s = SRS[c]; if (!s) return 'new'; return s.b >= 4 ? 'known' : 'learning'; }
@@ -115,6 +125,7 @@ function stopSpeech() {
   try { player.pause(); } catch (e) {}
   if (typeof ftReset === 'function') ftReset();
   spReset();
+  if (typeof epReset === 'function') epReset();
   if ('speechSynthesis' in window) speechSynthesis.cancel();
 }
 /* Nút nghe 1 câu (Bài học, popup câu): bấm = đọc, bấm lần nữa = tạm dừng, bấm tiếp = nghe tiếp */
@@ -149,29 +160,31 @@ function audioSrc(url) {
     .then(b => URL.createObjectURL(b)).catch(e => { blobCache.delete(url); throw e; }));
   return blobCache.get(url);                                        // file của app: tải bằng fetch (service worker lưu offline)
 }
-function playFiles(urls, onFail) {
+function playFiles(urls, onFail, rate = 1, onEnd) {
   const token = ++playToken; playQueue = urls.slice();
-  const fail = () => { if (token === playToken) { playQueue = []; if (SP.token === token) spReset(); onFail?.(); } };
+  const fail = () => { if (token === playToken) { playQueue = []; if (SP.token === token) spReset(); onEnd?.(); onFail?.(); } };
   try { player.src = SILENT; player.play()?.catch?.(() => {}); } catch (e) {}
   const next = () => {
     if (token !== playToken) return;
-    if (!playQueue.length) { if (SP.token === token) spReset(); return; }   // đọc xong
+    if (!playQueue.length) { if (SP.token === token) spReset(); onEnd?.(); return; }   // đọc xong
 
     const u = playQueue.shift();
     if (playQueue[0]) audioSrc(playQueue[0]).catch(() => {});      // tải trước đoạn kế tiếp
     audioSrc(u).then(src => {
       if (token !== playToken) return;
       player.src = src; player.onended = next; player.onerror = fail;
+      try { player.playbackRate = rate; player.preservesPitch = true; } catch (e) {}
       if (SP.token === token && SP.paused) return;                   // đã bấm tạm dừng trong lúc tải
       const pr = player.play(); if (pr && pr.catch) pr.catch(err => { if (err.name !== 'AbortError') fail(); });
     }, fail);
   };
   next();
 }
+const sentFile = (i, slow) => `${BOOK.audio}s${i}${slow && BOOK.slowFiles ? '-slow' : ''}.mp3`;
+const SLOW_RATE = 0.72;   // sách không có file đọc chậm riêng: phát chậm lại
 function localFiles(text, slow) {
   const t = text.trim();
-  if (SENT_IDX.has(t)) return [`audio/s${SENT_IDX.get(t)}${slow ? '-slow' : ''}.mp3`];
-  if (t === FULL_TEXT) return LESSONS.map((_, i) => `audio/s${i}${slow ? '-slow' : ''}.mp3`);
+  if (SENT_IDX.has(t)) return [sentFile(SENT_IDX.get(t), slow)];
   const k = audioKey(t); if (AUDIO.has(k)) return [`audio/${k}.mp3`];
   return null;
 }
@@ -201,7 +214,8 @@ function speak(text, rate = 0.8) {
   const slow = rate <= 0.6;
   const noSound = () => toast('Không phát được âm thanh. Hãy kiểm tra âm lượng (iPhone: gạt tắt chế độ im lặng) và kết nối mạng.', 5000);
   const files = localFiles(text, slow);
-  if (files) return playFiles(files, () => zhVoice ? speakWithVoice(text, rate) : noSound());
+  const pr = slow && !BOOK.slowFiles && SENT_IDX.has(text.trim()) ? SLOW_RATE : 1;
+  if (files) return playFiles(files, () => zhVoice ? speakWithVoice(text, rate) : noSound(), pr);
   if (zhVoice) return speakWithVoice(text, rate);
   const { files: pieces, missing } = pieceFiles(text);
   if (!pieces.length) return toast(VOICE_HELP, 7000);
@@ -293,9 +307,13 @@ function charSpan(c, py) {
   return `<span class="ch st-${status(c)}" data-c="${c}" title="${esc(title)}"><span class="py">${esc(py) || '&nbsp;'}</span><span class="hz">${c}</span><span class="hv">${esc(hv) || '&nbsp;'}</span></span>`;
 }
 function renderReader(text) {
+  // Pinyin theo ngữ cảnh của cả câu (chữ đa âm) nếu sách có SENT_PY
+  const si = SENT_IDX.get(text), sp = si != null && window.SENT_PY ? SENT_PY[si].split(' ') : null;
+  let k0 = 0;
+  const pyAt = (c, fb) => { if (!isHan(c)) return fb; const p = sp ? sp[k0++] : null; return p || fb; };
   return segment(text).map(t => {
-    if (t.w) return `<span class="wd" data-w="${t.w.w}" title="${esc(t.w.hv + ' – ' + t.w.m)}">${t.chars.map((c, k) => charSpan(c, t.w.py[k])).join('')}</span>`;
-    if (isHan(t.c)) return charSpan(t.c, pyOf(t.c));
+    if (t.w) return `<span class="wd" data-w="${t.w.w}" title="${esc(t.w.hv + ' – ' + t.w.m)}">${t.chars.map((c, k) => charSpan(c, pyAt(c, t.w.py[k]))).join('')}</span>`;
+    if (isHan(t.c)) return charSpan(t.c, pyAt(t.c, pyOf(t.c)));
     if (/\s/.test(t.c)) return '<span class="pn"> </span>';
     return `<span class="pn">${esc(t.c)}</span>`;
   }).join('');
@@ -340,7 +358,7 @@ function renderSentenceAnalysis(i) {
     ? `<span class="g-p hz">${esc(c.t)}</span>`
     : `<div class="g-chunk r-${c.r}"><span class="g-t hz">${[...c.t].map(ch => isHan(ch) && CHARS[ch] ? `<span data-c="${ch}">${ch}</span>` : esc(ch)).join('')}</span><span class="g-r">${ROLES[c.r]?.[0] || c.r}</span><span class="g-g">${esc(c.g)}</span></div>`).join('')}</div>`;
 }
-const noteCard = (n, lessons) => `<div class="g-note"><div class="g-pat">${hzText(n.p)}</div><div class="g-title">${esc(n.title)}</div><div class="g-ex">${hzText(n.ex)}</div>${lessons && lessons.length ? `<div class="chips" style="margin-top:8px"><small style="align-self:center">Gặp ở:</small>${lessons.map(i => `<button class="chip" data-goto-lesson="${i}">Bài ${i + 1}</button>`).join('')}</div>` : ''}</div>`;
+const noteCard = (n, lessons) => `<div class="g-note"><div class="g-pat">${hzText(n.p)}</div><div class="g-title">${esc(n.title)}</div><div class="g-ex">${hzText(n.ex)}</div>${lessons && lessons.length ? `<div class="chips" style="margin-top:8px"><small style="align-self:center">Gặp ở:</small>${lessons.slice(0, 24).map(i => `<button class="chip" data-goto-lesson="${i}">Bài ${i + 1}</button>`).join('')}${lessons.length > 24 ? `<small style="align-self:center">… +${lessons.length - 24}</small>` : ''}</div>` : ''}</div>`;
 function renderGrammarPanel(i) {
   const g = GRAM[i]; if (!g) return '';
   return `<div class="panel" style="margin-top:16px">
@@ -365,6 +383,8 @@ function openModal(view, push = true) {
   else if (view.type === 'comp') renderCompView(view.k);
   else if (view.type === 'help') renderVoiceHelp();
   else if (view.type === 'sent') renderSentView(view);
+  else if (view.type === 'books') renderBooks();
+  else if (typeof enModal === 'function') enModal(view);
   $('.modal-panel').scrollTop = 0;
   spUI();
 }
@@ -423,7 +443,7 @@ function renderCharView(c) {
       ${formula}
       <div class="ex">💡 ${esc(d.ex)}</div>
       ${words.length ? `<h4>Từ ghép trong bài (${words.length})</h4><div class="chips">${words.map(w => `<button class="chip" data-w="${w.w}"><span class="hz">${w.w}</span>${esc(w.hv)}</button>`).join('')}</div>` : ''}
-      ${lessons.length ? `<h4>Xuất hiện ở bài</h4><div class="chips">${lessons.map(i => `<button class="chip" data-goto-lesson="${i}">Bài ${i + 1}</button>`).join('')}</div>` : ''}
+      ${lessons.length ? `<h4>Xuất hiện ở bài (${lessons.length})</h4><div class="chips">${lessons.slice(0, 30).map(i => `<button class="chip" data-goto-lesson="${i}">Bài ${i + 1}</button>`).join('')}${lessons.length > 30 ? `<small style="align-self:center">… +${lessons.length - 30}</small>` : ''}</div>` : ''}
       <h4>Mức độ thuộc</h4>
       <div class="status-row">
         <button class="btn ${st === 'new' ? 'sel-new' : ''}" data-status="new">Chưa học</button>
@@ -437,8 +457,8 @@ function renderCharView(c) {
   <h4 style="margin:22px 0 10px;font-size:13px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)">Thứ tự nét viết <small style="text-transform:none">(chấm vàng = điểm đặt bút)</small></h4>
   <div class="steps" id="cdSteps"></div>
   <div class="cd-nav">
-    <button class="btn" data-nav="${idx - 1}" ${idx === 0 ? 'disabled' : ''}>‹ ${idx > 0 ? CHAR_LIST[idx - 1].c : ''} Chữ trước</button>
-    <button class="btn" data-nav="${idx + 1}" ${idx === CHAR_LIST.length - 1 ? 'disabled' : ''}>Chữ sau ${idx < CHAR_LIST.length - 1 ? CHAR_LIST[idx + 1].c : ''} ›</button>
+    <button class="btn" data-nav="${idx - 1}" ${idx <= 0 ? 'disabled' : ''}>‹ ${idx > 0 ? CHAR_LIST[idx - 1].c : ''} Chữ trước</button>
+    <button class="btn" data-nav="${idx + 1}" ${idx < 0 || idx === CHAR_LIST.length - 1 ? 'disabled' : ''}>Chữ sau ${idx < CHAR_LIST.length - 1 ? CHAR_LIST[idx + 1].c : ''} ›</button>
   </div>`;
   $('#cdNote').addEventListener('input', e => { const v = e.target.value.trim(); if (v) NOTES[c] = v; else delete NOTES[c]; store.set('notes', NOTES); });
   setupWriterPanel(c, $('#cdWriter'), $('#cdMsg'));
@@ -582,12 +602,12 @@ renderers.lessons = () => {
   <div class="lesson-layout">
     <aside class="panel ls-list">
       <div class="ls-progress">Đã học ${doneCount}/${LESSON_LIST.length} bài<div class="bar"><i style="width:${100 * doneCount / LESSON_LIST.length}%"></i></div></div>
-      ${LESSON_LIST.map(x => `<button class="ls-item ${x.i === i ? 'active' : ''} ${DONE[x.i] ? 'done' : ''}" data-lesson="${x.i}"><span class="n">${x.i + 1}</span><span class="t hz">${esc(x.text.slice(0, 12))}</span><span class="pct">${pct(x)}%</span></button>`).join('')}
+      ${LESSON_LIST.map(x => `${SECTIONS && SECTIONS.some(S => S.a === x.i) ? `<div class="ls-sec">${secOf(x.i) + 1}. ${esc(SECTIONS[secOf(x.i)].vi)}</div>` : ''}<button class="ls-item ${x.i === i ? 'active' : ''} ${DONE[x.i] ? 'done' : ''}" data-lesson="${x.i}"><span class="n">${x.i + 1}</span><span class="t hz">${esc(x.text.slice(0, 12))}</span><span class="pct">${pct(x)}%</span></button>`).join('')}
     </aside>
     <div>
       <div class="panel">
         <div class="lesson-head">
-          <h2>Bài ${i + 1}<small>/ ${LESSON_LIST.length}</small></h2>
+          <h2>Bài ${i + 1}<small>/ ${LESSON_LIST.length}${SECTIONS ? ` · ${esc(SECTIONS[secOf(i)].vi)}` : ''}</small></h2>
           <div class="btn-row">
             <button class="btn" data-say-text="${i}">🔊 Nghe cả câu</button>
             <button class="btn" data-say-text="${i}" data-slow>🐢 Đọc chậm</button>
@@ -596,8 +616,9 @@ renderers.lessons = () => {
           </div>
         </div>
         <div class="reader big">${renderReader(l.text)}</div>
-        <div class="vi ${SETTINGS.vi ? '' : 'blur'}" id="viBox" title="Bấm để ẩn/hiện bản dịch"><span class="lbl">BẢN DỊCH (bấm để ẩn/hiện)</span>${esc(l.viOff)}<div class="vi-lit"><b>Dịch sát từng chữ:</b> ${esc(l.vi)}</div></div>
+        <div class="vi ${SETTINGS.vi ? '' : 'blur'}" id="viBox" title="Bấm để ẩn/hiện bản dịch"><span class="lbl">BẢN DỊCH (bấm để ẩn/hiện)</span>${esc(l.viOff)}${l.vi && l.vi !== l.viOff ? `<div class="vi-lit"><b>Dịch sát từng chữ:</b> ${esc(l.vi)}</div>` : ''}</div>
       </div>
+      ${typeof enLessonPanel === 'function' ? enLessonPanel(i) : ''}
       ${renderGrammarPanel(i)}
       <h3 class="sec-title">Từ vựng trong câu <small>${words.length} từ – bấm để xem cách ghép nghĩa</small></h3>
       <div class="word-grid">${words.map(wordCard).join('')}</div>
@@ -610,10 +631,11 @@ renderers.lessons = () => {
       </div>
     </div>
   </div>`;
+  { const act = $('.ls-item.active'), box = act?.closest('.ls-list'); if (act && box && box.scrollHeight > box.clientHeight + 4) box.scrollTop = act.offsetTop - box.offsetTop - box.clientHeight / 3; }
   $('#viBox').onclick = () => { SETTINGS.vi = !SETTINGS.vi; saveSettings(); $('#viBox').classList.toggle('blur', !SETTINGS.vi); };
   $('#btnDone').onclick = () => {
     if (DONE[i]) delete DONE[i]; else { DONE[i] = Date.now(); newChars.forEach(c => { if (!SRS[c]) setStatus(c, 'learning'); }); toast(`Đã thêm ${newChars.length} chữ mới vào danh sách ôn tập`); }
-    store.set('done', DONE); renderers.lessons(); spUI();
+    store.set(DONE_KEY, DONE); renderers.lessons(); spUI();
   };
 };
 function gotoLesson(i) { closeModal(); switchLesson(i); }
@@ -626,30 +648,49 @@ function setToggle(key, on) {
   if (key === 'hv') $('#tglHv').checked = on;
   $$(`[data-pill="${key}"]`).forEach(b => { b.classList.toggle('on', on); b.setAttribute('aria-pressed', on); });
 }
+const EN_ON = () => !!(window.EN_DATA && EN_DATA.sents);
+const enOf = i => (EN_ON() && EN_DATA.sents[i]?.en) || '';
+const curSec = () => SECTIONS ? Math.min(SETTINGS['sec_' + BOOK.id] || 0, SECTIONS.length - 1) : -1;
+function setSec(k) {
+  if (!SECTIONS || k < 0 || k >= SECTIONS.length) return;
+  if (FT.mode) stopSpeech();
+  SETTINGS['sec_' + BOOK.id] = k; saveSettings();
+  renderers.text(); window.scrollTo({ top: 0 });
+}
+const bookTitle = () => `<span class="hz">${esc(BOOK.zh)}</span> <small>${esc(BOOK.vi)}</small>`;
 renderers.text = () => {
+  const sec = curSec(), S = sec >= 0 ? SECTIONS[sec] : null;
+  const paras = S ? PARAS.filter(([a]) => a >= S.a && a <= S.b) : PARAS;
   $('#tab-text').innerHTML = `
     <div class="tx-head">
-      <div><h2><span class="hz">論語</span> <small>Luận ngữ</small></h2>
-        <p class="tx-hint">👆 Chạm vào một câu để xem ngữ pháp, cách ghép chữ và tập viết · 🔊 nghe riêng từng câu.</p></div>
+      <div><h2>${bookTitle()} <button class="btn sm book-sw" data-books title="Chọn bài khác">📚 Đổi bài</button></h2>
+        <p class="tx-hint">👆 Chạm vào một câu để xem ngữ pháp, cách ghép chữ, tập viết${EN_ON() ? ' và tiếng Anh' : ''} · 🔊 nghe riêng từng câu.</p></div>
       <div class="tx-tools">
-        <div class="pills">${pill('py', 'Pinyin')}${pill('hv', 'Hán Việt')}${pill('viOn', 'Tiếng Việt')}</div>
+        <div class="pills">${pill('py', 'Pinyin')}${pill('hv', 'Hán Việt')}${pill('viOn', 'Tiếng Việt')}${EN_ON() ? pill('enOn', 'English') : ''}</div>
         <div class="btn-row">
           <button class="btn ft-btn" data-ft="normal"></button>
           <button class="btn ft-btn" data-ft="slow"></button>
         </div>
       </div>
     </div>
-    ${PARAS.map(([a, b]) => `<div class="tx-para">${LESSON_LIST.slice(a, b + 1).map(l => `
+    ${S ? `<div class="sec-nav">${SECTIONS.map((x, k) => `<button class="chip ${k === sec ? 'on' : ''}" data-sec="${k}">${k + 1}. ${esc(x.vi)}</button>`).join('')}</div>
+      <h3 class="sec-head"><span class="hz">${esc(S.zh)}</span><span>${esc(S.vi)}</span>${S.en ? `<i class="sent-en">${esc(S.en)}</i>` : ''}</h3>` : ''}
+    ${paras.map(([a, b]) => `<div class="tx-para">${LESSON_LIST.slice(a, b + 1).map(l => `
       <div class="sent" data-sent="${l.i}" role="button" tabindex="0" aria-label="Câu ${l.i + 1}">
         <div class="sent-side"><span class="sent-n">${l.i + 1}</span><button class="sent-spk" data-say-text="${l.i}" data-icon title="Nghe câu này" aria-label="Nghe câu ${l.i + 1}">🔊</button></div>
-        <div class="sent-body"><div class="reader">${renderReader(l.text)}</div><div class="sent-vi">${esc(l.viOff)}</div></div>
+        <div class="sent-body"><div class="reader">${renderReader(l.text)}</div><div class="sent-vi">${esc(l.viOff)}</div>${enOf(l.i) ? `<div class="sent-en">${esc(enOf(l.i))}</div>` : ''}</div>
       </div>`).join('')}</div>`).join('')}
-    <p class="tx-src">Bản dịch tiếng Việt: <a href="${esc(window.VI_SOURCE || '#')}" target="_blank" rel="noopener">vi.falundafa.org</a></p>`;
+    ${S ? `<div class="lesson-nav">
+      <button class="btn" data-sec="${sec - 1}" ${sec === 0 ? 'disabled' : ''}>‹ Mục trước</button>
+      <span class="muted">Mục ${sec + 1} / ${SECTIONS.length}</span>
+      <button class="btn" data-sec="${sec + 1}" ${sec === SECTIONS.length - 1 ? 'disabled' : ''}>Mục sau ›</button></div>` : ''}
+    <p class="tx-src">Bản dịch tiếng Việt: <a href="${esc(window.VI_SOURCE || '#')}" target="_blank" rel="noopener">vi.falundafa.org</a>${EN_ON() && EN_DATA.source ? ` · English: <a href="${esc(EN_DATA.source)}" target="_blank" rel="noopener">en.falundafa.org</a>` : ''}</p>`;
   ftUI();
+  if (typeof scrollSecNav === 'function') requestAnimationFrame(scrollSecNav);
 };
 
 /* Nghe toàn bài: bấm 1 lần = đọc, bấm lần nữa = tạm dừng, bấm tiếp = nghe tiếp */
-const FT = { mode: null, idx: 0, paused: false, token: 0 };
+const FT = { mode: null, idx: 0, end: 0, paused: false, token: 0 };
 const FT_LABEL = { normal: ['🔊 Nghe toàn bài', '⏸ Tạm dừng', '▶ Nghe tiếp'], slow: ['🐢 Nghe chậm', '⏸ Tạm dừng', '▶ Nghe tiếp'] };
 function ftUI() {
   $$('[data-ft]').forEach(b => {
@@ -663,13 +704,14 @@ function ftUI() {
 function ftReset() { if (!FT.mode) return; FT.mode = null; FT.paused = false; ftUI(); }
 function ftPlay(i) {
   const token = FT.token;
-  if (i >= LESSONS.length) { ftReset(); return; }
+  if (i > FT.end || i >= LESSONS.length) { ftReset(); return; }
   FT.idx = i; ftUI();
   const el = $(`.sent[data-sent="${i}"]`);
   if (el && currentTab === 'text' && $('#modal').hidden) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  audioSrc(`audio/s${i}${FT.mode === 'slow' ? '-slow' : ''}.mp3`).then(src => {
+  audioSrc(sentFile(i, FT.mode === 'slow')).then(src => {
     if (token !== FT.token || token !== playToken) return;
     player.src = src;
+    try { player.playbackRate = FT.mode === 'slow' && !BOOK.slowFiles ? SLOW_RATE : 1; player.preservesPitch = true; } catch (e) {}
     player.onended = () => { if (token === FT.token && token === playToken) ftPlay(i + 1); };
     player.onerror = () => { if (token === FT.token) { ftReset(); toast('Không phát được âm thanh. Kiểm tra mạng và âm lượng.'); } };
     if (!FT.paused) player.play()?.catch?.(err => { if (err.name !== 'AbortError' && token === FT.token) { ftReset(); toast('Không phát được âm thanh. Kiểm tra âm lượng (iPhone: tắt chế độ im lặng).'); } });
@@ -684,19 +726,22 @@ function ftToggle(mode) {
   stopSpeech();                                   // dừng mọi âm thanh khác (cũng reset FT cũ)
   try { player.src = SILENT; player.play()?.catch?.(() => {}); } catch (e) {}   // mở khóa âm thanh trên iOS
   FT.mode = mode; FT.paused = false; FT.token = playToken;
-  ftPlay(0);
+  const S = SECTIONS ? SECTIONS[curSec()] : null;
+  FT.end = S ? S.b : LESSONS.length - 1;
+  ftPlay(S ? S.a : 0);
 }
 const openSent = (i, tab = 'gram') => openModal({ type: 'sent', i, tab, wc: 0 });
 
 /* ---------- Sentence popup ---------- */
 const SENT_TABS = [['gram', '📐 Ngữ pháp'], ['words', '🧩 Từ & chữ'], ['write', '✍️ Tập viết']];
+if (window.EN_DATA) SENT_TABS.push(['en', '🇬🇧 English']);
 function renderSentView(v) {
   const i = v.i, l = LESSON_LIST[i], last = LESSON_LIST.length - 1;
   $('#modalTitle').textContent = `Câu ${i + 1} / ${LESSON_LIST.length}`;
   $('#modalBody').innerHTML = `
     <div class="sv-top">
       <div class="reader sv-reader">${renderReader(l.text)}</div>
-      <div class="sv-vi">${esc(l.viOff)}</div>
+      <div class="sv-vi">${esc(l.viOff)}</div>${enOf(i) ? `<div class="sv-en sent-en">${esc(enOf(i))}</div>` : ''}
       <div class="sv-actions">
         <button class="btn" data-say-text="${i}">🔊 Nghe</button>
         <button class="btn" data-say-text="${i}" data-slow>🐢 Chậm</button>
@@ -760,14 +805,16 @@ function drawSentPane(v) {
       <div class="sv-notes">${g.notes.map(n => {
         const seen = GRAM_INDEX.find(e => e.p === n.p).lessons.filter(x => x !== i);
         return `<div class="g-note"><div class="g-pat">${hzText(n.p)}</div><div class="g-title">${esc(n.title)}</div><div class="g-ex">${hzText(n.ex)}</div>
-          ${seen.length ? `<div class="sv-seen">Cũng gặp ở: ${seen.map(x => `<button class="chip" data-sv-nav="${x}">Câu ${x + 1}</button>`).join('')}</div>` : ''}</div>`;
+          ${seen.length ? `<div class="sv-seen">Cũng gặp ở: ${seen.slice(0, 12).map(x => `<button class="chip" data-sv-nav="${x}">Câu ${x + 1}</button>`).join('')}${seen.length > 12 ? `<span class="muted"> … và ${seen.length - 12} câu khác</span>` : ''}</div>` : ''}</div>`;
       }).join('')}</div>`;
   } else if (v.tab === 'words') {
     const units = sentUnits(l.text);
     pane.innerHTML = `<p class="sv-lead">${units.length} từ/chữ theo thứ tự trong câu. Chạm vào từng dòng để xem nghĩa được ghép từ các bộ thế nào và ví dụ ở câu khác.</p>
       <div class="wi-list">${units.map(k => unitItem(k, i)).join('')}</div>
-      <details class="vi-lit-box"><summary>Xem bản dịch sát từng chữ</summary><p>${esc(l.vi)}</p></details>`;
+      ${l.vi && l.vi !== l.viOff ? `<details class="vi-lit-box"><summary>Xem bản dịch sát từng chữ</summary><p>${esc(l.vi)}</p></details>` : ''}`;
     pane.querySelector('details.wi')?.setAttribute('open', '');
+  } else if (v.tab === 'en') {
+    if (typeof enSentPane === 'function') enSentPane(pane, i);
   } else {
     const chars = uniqHan(l.text).filter(c => CHARS[c]);
     const k = Math.max(0, Math.min(v.wc || 0, chars.length - 1)), c = chars[k], d = CHARS[c];
@@ -857,7 +904,7 @@ renderers.radicals = () => {
   $('#tab-radicals').innerHTML = `
     <div class="panel" style="margin-bottom:16px"><b>Mẹo:</b> Phần lớn chữ Hán là chữ <b>hình thanh</b>: một bộ chỉ <i>nghĩa</i> (thường ở bên trái hoặc phía trên) + một phần gợi <i>âm đọc</i>.
       Nhớ được khoảng 50 bộ thủ hay gặp là bạn đoán được nghĩa của rất nhiều chữ. Ví dụ: chữ có <span class="hz">氵</span> thường liên quan đến nước, <span class="hz">扌</span> đến tay, <span class="hz">言</span> đến lời nói, <span class="hz">辶</span> đến việc đi lại.</div>
-    <h3 class="sec-title">Bộ thủ của 250 chữ trong bài <small>${rads.length} bộ – xếp theo số thứ tự Khang Hy</small></h3>
+    <h3 class="sec-title">Bộ thủ của ${CHAR_LIST.length} chữ trong bài <small>${rads.length} bộ – xếp theo số thứ tự Khang Hy</small></h3>
     <div class="rad-grid">${rads.map(k => radCard(k, groups[k], `${groups[k].length} chữ`)).join('')}</div>
     <h3 class="sec-title">Thành phần hay gặp nhất <small>xuất hiện trong ≥ 3 chữ</small></h3>
     <div class="rad-grid">${common.map(([k, n]) => radCard(k, (COMP_INDEX[k] || []), `có trong ${n} chữ`)).join('')}</div>`;
@@ -869,7 +916,7 @@ let gramQ = '';
 renderers.grammar = () => {
   if (!$('#gramList')) {
     $('#tab-grammar').innerHTML = `
-      <div class="panel" style="margin-bottom:16px"><h2>Ngữ pháp trong bài <small>${GRAM_INDEX.length} điểm ngữ pháp từ 20 câu</small></h2>
+      <div class="panel" style="margin-bottom:16px"><h2>Ngữ pháp trong bài <small>${GRAM_INDEX.length} điểm ngữ pháp từ ${LESSONS.length} câu</small></h2>
         <p class="muted" style="margin:6px 0 10px">Ba điểm khác biệt lớn nhất so với tiếng Việt: <b>(1)</b> phần bổ nghĩa đứng <b>trước</b> danh từ (<span class="hz">創世主的智慧</span> = trí tuệ của Đấng Sáng Thế); <b>(2)</b> trạng ngữ thời gian, nơi chốn đứng <b>trước</b> động từ (<span class="hz">在正法中修煉</span> = tu luyện trong Chính Pháp); <b>(3)</b> từ phương vị đứng <b>sau</b> danh từ (<span class="hz">天空中</span> = trong bầu trời).</p>
         ${roleLegend()}
         <input type="search" id="gramQ" placeholder="Tìm mẫu câu… (vd: 是, bị động, 才, so sánh)" style="width:100%;margin-top:10px"></div>
@@ -910,7 +957,7 @@ function drawReviewSetup() {
             <option value="due">Chỉ chữ đến hạn ôn (${due})</option>
             <option value="learning">Chữ đang học (${learning})</option>
             <option value="known">Chữ đã thuộc (${known})</option>
-            <option value="all">Tất cả 250 chữ (ngẫu nhiên)</option>
+            <option value="all">Tất cả ${CHAR_LIST.length} chữ (ngẫu nhiên)</option>
             ${LESSON_LIST.map(l => `<option value="lesson:${l.i}">Bài ${l.i + 1}: ${esc(l.text.slice(0, 10))}…</option>`).join('')}
           </select>
           <b>Số thẻ mỗi lượt</b>
@@ -1079,7 +1126,7 @@ renderers.write = () => {
     <aside class="panel write-pick">
       <b>Chọn chữ để luyện</b>
       <select id="wrLesson" style="width:100%;margin:8px 0">
-        <option value="-1">Tất cả 250 chữ</option>
+        <option value="-1">Tất cả ${CHAR_LIST.length} chữ</option>
         ${LESSON_LIST.map(l => `<option value="${l.i}" ${WR.lesson === l.i ? 'selected' : ''}>Bài ${l.i + 1}: ${esc(l.text.slice(0, 10))}…</option>`).join('')}
       </select>
       <div class="chips">${pool.map(c => `<button class="chip hz st-${status(c)} ${c === WR.c ? 'active' : ''}" data-wr="${c}" style="font-size:20px">${c}</button>`).join('')}</div>
@@ -1174,6 +1221,10 @@ document.addEventListener('click', e => {
   const svn = t.closest('[data-sv-nav]'); if (svn && !svn.disabled) { e.preventDefault(); const v = modalStack.at(-1); modalStack[modalStack.length - 1] = { type: 'sent', i: +svn.dataset.svNav, tab: v?.type === 'sent' ? v.tab : 'gram', wc: 0 }; openModal(modalStack.at(-1), false); return; }
   const svw = t.closest('[data-sv-wc]'); if (svw && !svw.disabled) { const v = modalStack.at(-1); v.wc = +svw.dataset.svWc; drawSentPane(v); return; }
   const sent = t.closest('[data-sent]'); if (sent && !t.closest('#modal')) return openSent(+sent.dataset.sent);
+  const bk = t.closest('[data-book]'); if (bk) return switchBook(bk.dataset.book);
+  if (t.closest('[data-books]')) { modalStack.length = 0; return openModal({ type: 'books' }); }
+  const sc = t.closest('[data-sec]'); if (sc && !sc.disabled) return setSec(+sc.dataset.sec);
+  if (typeof enClick === 'function' && enClick(e, t)) return;
   const tab = t.closest('#tabs [data-tab]'); if (tab) { if (tab.dataset.tab === 'review' && RV) RV.active = RV.active && currentTab === 'review'; return showTab(tab.dataset.tab); }
   const gl = t.closest('[data-goto-lesson]'); if (gl) return gotoLesson(+gl.dataset.gotoLesson);
   const ls = t.closest('[data-lesson]'); if (ls && !ls.disabled) return switchLesson(+ls.dataset.lesson);
@@ -1215,15 +1266,35 @@ document.addEventListener('keydown', e => {
   }
 });
 $('#tglPy').checked = SETTINGS.py; $('#tglHv').checked = SETTINGS.hv;
-const applyToggles = () => { document.body.classList.toggle('show-py', SETTINGS.py); document.body.classList.toggle('show-hv', SETTINGS.hv); document.body.classList.toggle('hide-vi', !SETTINGS.viOn); };
+const applyToggles = () => { document.body.classList.toggle('show-py', SETTINGS.py); document.body.classList.toggle('show-hv', SETTINGS.hv); document.body.classList.toggle('hide-vi', !SETTINGS.viOn); document.body.classList.toggle('hide-en', !SETTINGS.enOn); };
 $('#tglPy').onchange = e => setToggle('py', e.target.checked);
 $('#tglHv').onchange = e => setToggle('hv', e.target.checked);
 $('#stats').onclick = () => showTab('review');
 
+function renderBooks() {
+  $('#modalTitle').textContent = 'Chọn bài để học';
+  const all = window.BOOKS || { [BOOK.id]: BOOK };
+  $('#modalBody').innerHTML = `<div class="books">${Object.values(all).map(b => `
+    <button class="book-card ${b.id === BOOK.id ? 'on' : ''}" data-book="${b.id}">
+      <span class="hz bk-zh">${esc(b.zh)}</span>
+      <span class="bk-vi">${esc(b.vi)}</span>
+      <span class="bk-en">${esc(b.en || '')}</span>
+      <span class="muted bk-desc">${esc(b.desc || '')}</span>
+      ${b.id === BOOK.id ? '<span class="bk-cur">✓ Đang học</span>' : '<span class="bk-go">Học bài này ›</span>'}
+    </button>`).join('')}</div>
+    <p class="muted" style="margin-top:12px">Tiến độ (chữ đã thuộc, ghi chú) được giữ chung; mỗi bài nhớ riêng vị trí đang học.</p>`;
+}
+function switchBook(id) {
+  if (id === BOOK.id) return closeModal();
+  SETTINGS.book = id; saveSettings();
+  try { localStorage.setItem('hht_book', id); } catch (e) {}
+  const u = new URL(location.href); u.searchParams.delete('book'); history.replaceState(null, '', u);
+  location.reload();
+}
 function renderVoiceHelp() {
   $('#modalTitle').textContent = 'Nghe không được?';
   $('#modalBody').innerHTML = `<div class="help">
-    <p><b>Chữ, từ và 20 câu bài học</b> đã có sẵn file âm thanh trong app – <b>không cần cài gì</b>. Nếu vẫn không nghe:</p>
+    <p><b>Chữ, từ và các câu bài học</b> đã có sẵn file âm thanh trong app – <b>không cần cài gì</b>. Nếu vẫn không nghe:</p>
     <ul><li>Tăng âm lượng; trên <b>iPhone</b> gạt tắt nút <b>im lặng</b> ở cạnh máy.</li>
     <li>Lần đầu nghe mỗi chữ cần có mạng; sau đó nghe được cả khi offline.</li>
     <li>Thấy thông báo “Đã có phiên bản mới” thì bấm <b>Cập nhật ngay</b>.</li></ul>
@@ -1248,13 +1319,15 @@ $('#fileImport').onchange = async e => {
     const o = JSON.parse(await e.target.files[0].text());
     SRS = o.srs || {}; NOTES = o.notes || {}; DONE = o.done || {}; CUSTOM = o.custom || [];
     Object.assign(SETTINGS, o.settings || {});
-    ['srs', 'notes', 'done', 'custom'].forEach(k => store.set(k, { srs: SRS, notes: NOTES, done: DONE, custom: CUSTOM }[k])); saveSettings();
+    ['srs', 'notes', 'custom'].forEach(k => store.set(k, { srs: SRS, notes: NOTES, custom: CUSTOM }[k])); store.set(DONE_KEY, DONE); saveSettings();
     toast('Đã khôi phục tiến độ'); updateStats(); applyToggles(); showTab(currentTab);
   } catch { toast('File không hợp lệ'); }
 };
 
 applyToggles();
 updateStats();
+{ const bb = $('#bookBtn'); if (bb) bb.innerHTML = `📚 <span>${esc(BOOK.short)}</span> ▾`; }
+document.title = `Học Chữ Hán – ${BOOK.short}`;
 showTab('text');
 
 /* ================= Nút Back của điện thoại / trình duyệt =================

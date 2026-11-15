@@ -1,6 +1,8 @@
 # Học Chữ Hán
 
-App web học chữ Hán phồn thể theo văn bản, dành cho người Việt: bộ thủ, chiết tự, thứ tự nét viết, ngữ pháp từng câu, ôn tập lặp lại ngắt quãng.
+App web học chữ Hán phồn thể **và tiếng Anh** theo văn bản, dành cho người Việt: bộ thủ, chiết tự, thứ tự nét viết, ngữ pháp từng câu, ôn tập lặp lại ngắt quãng; tiếng Anh có phiên âm IPA, nghe, ngữ pháp, từ vựng, luyện đọc (máy chấm phát âm) và luyện viết.
+
+Hai bài: **Luận ngữ** (20 câu) và **Chuyển Pháp Luân – Bài giảng thứ nhất** (672 câu, ~1000 chữ). Đổi bài bằng nút 📚 trên thanh trên cùng.
 Là **PWA**: dùng như website, cài được lên điện thoại/máy tính như app, chạy offline.
 
 ## Cấu trúc
@@ -13,6 +15,12 @@ Là **PWA**: dùng như website, cài được lên điện thoại/máy tính n
 | `js/data-grammar.js` | Ngữ pháp từng câu: phân tích `chữ[VAI:nghĩa]` + điểm ngữ pháp |
 | `data/strokes/*.json` | Dữ liệu nét viết của 250 chữ (tên file = mã Unicode hex) |
 | `audio/*.mp3`, `js/data-audio.js` | Âm thanh đọc sẵn cho chữ, từ, 20 câu (tạo bằng `tools/gen_audio.py`) |
+| `js/boot.js` | Danh sách bài (sách) và nạp dữ liệu của bài đang chọn |
+| `js/data-chars2.js` | ~780 chữ bổ sung cho Bài giảng thứ nhất |
+| `js/books/zfl1/` | Bài giảng thứ nhất: câu + pinyin + từ ghép, ngữ pháp, tiếng Việt, tiếng Anh |
+| `js/books/lunyu/en.js`, `js/english.js` | Tiếng Anh: câu, phân tích ngữ pháp, từ vựng, IPA · giao diện tab 🇬🇧 Tiếng Anh |
+| `audio/zfl1/`, `audio/en/` | Âm thanh câu tiếng Trung của Bài giảng 1; câu & từ tiếng Anh |
+| `tools/zfl1/` | Công cụ tạo dữ liệu Bài giảng 1 (tách đoạn, gióng câu, kiểm tra, build) |
 | `js/vendor/hanzi-writer.min.js` | Thư viện vẽ & chấm nét viết |
 | `manifest.webmanifest`, `sw.js`, `icons/` | Phần PWA (cài app, offline) |
 
