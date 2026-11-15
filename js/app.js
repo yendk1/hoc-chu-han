@@ -511,13 +511,18 @@ function renderCompView(k) {
 /* ================= Tabs ================= */
 const renderers = {};
 let currentTab = 'text';
-function showTab(tab) {
+const tabHist = [], tabScroll = {};
+function showTab(tab, opts = {}) {
   if (FT.mode && tab !== 'text') stopSpeech();
+  if (tab !== currentTab) {
+    tabScroll[currentTab] = window.scrollY;
+    if (!opts.back) { tabHist.push(currentTab); if (tabHist.length > 30) tabHist.shift(); }
+  }
   currentTab = tab;
   $$('#tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   $$('.tab').forEach(s => s.classList.toggle('active', s.id === 'tab-' + tab));
   renderers[tab]?.();
-  window.scrollTo({ top: 0 });
+  window.scrollTo({ top: opts.back ? (tabScroll[tab] || 0) : 0 });
 }
 
 /* ---------- Lessons ---------- */
@@ -1205,6 +1210,37 @@ $('#fileImport').onchange = async e => {
 applyToggles();
 updateStats();
 showTab('text');
+
+/* ================= Nút Back của điện thoại / trình duyệt =================
+ * Luôn giữ 1 bước lịch sử "đệm" phía trên trang gốc. Mỗi lần bấm Back:
+ * đóng popup / quay lại tab trước; ở trang chính thì phải bấm Back 2 lần mới thoát. */
+function goBack() {
+  if (!$('#modal').hidden) {
+    if (modalStack.length > 1) { modalStack.pop(); openModal(modalStack.at(-1), false); } else closeModal();
+    return true;
+  }
+  while (tabHist.length) { const t = tabHist.pop(); if (t !== currentTab) { showTab(t, { back: true }); return true; } }
+  if (currentTab !== 'text') { showTab('text', { back: true }); return true; }
+  return false;
+}
+let lastBackAt = 0, exiting = false;
+const pushGuard = () => { if (history.state?.hh !== 'app') history.pushState({ hh: 'app' }, ''); };
+if (window.history && history.pushState) {
+  if ('scrollRestoration' in history) history.scrollRestoration = 'manual';   // app tự giữ vị trí cuộn
+  if (history.state?.hh !== 'app') { history.replaceState({ hh: 'root' }, ''); history.pushState({ hh: 'app' }, ''); }
+  window.addEventListener('popstate', () => {
+    if (exiting) return;
+    if (goBack()) { pushGuard(); return; }
+    const now = Date.now();
+    if (now - lastBackAt < 2000) {
+      exiting = true; history.back();
+      // nếu không thoát được (vd: tab trình duyệt không có trang trước) thì khôi phục lại
+      setTimeout(() => { exiting = false; pushGuard(); }, 700);
+      return;
+    }
+    lastBackAt = now; toast('Bấm Back lần nữa để thoát'); pushGuard();
+  });
+}
 
 /* ================= PWA: offline + cài đặt + cập nhật ================= */
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
